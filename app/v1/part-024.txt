@@ -1,0 +1,1000 @@
+      ctx = canvas.getContext("2d", {
+        alpha: false,
+        willReadFrequently: true
+      });
+      this.#canvasContexts.set(lang, ctx);
+      this.#canvasCtxFonts.set(ctx, {
+        size: 0,
+        family: ""
+      });
+    }
+    return ctx;
+  }
+  static #quantizeFontSize(size) {
+    size = Math.fround(size);
+    const d = Math.fround(size * ((1 << 17) + 1));
+    return Math.fround(d - Math.fround(d - size));
+  }
+  static #ensureCtxFont(ctx, size, family) {
+    const cached = this.#canvasCtxFonts.get(ctx);
+    if (size === cached.size && family === cached.family) {
+      return;
+    }
+    ctx.font = `${size}px ${family}`;
+    cached.size = size;
+    cached.family = family;
+  }
+  static #ensureMinFontSizeComputed() {
+    if (this.#minFontSize !== null) {
+      return;
+    }
+    const div = document.createElement("div");
+    div.style.opacity = 0;
+    div.style.lineHeight = 1;
+    div.style.fontSize = "1px";
+    div.style.position = "absolute";
+    div.textContent = "X";
+    document.body.append(div);
+    this.#minFontSize = div.getBoundingClientRect().height;
+    div.remove();
+  }
+  static #getAscent(fontFamily, style, lang) {
+    const cachedAscent = this.#ascentCache.get(fontFamily);
+    if (cachedAscent) {
+      return cachedAscent;
+    }
+    const ctx = this.#getCtx(lang);
+    this.#ensureCtxFont(ctx, DEFAULT_FONT_SIZE, fontFamily);
+    const metrics = ctx.measureText("");
+    const ascent = metrics.fontBoundingBoxAscent;
+    const descent = Math.abs(metrics.fontBoundingBoxDescent);
+    let ratio = 0.8;
+    if (ascent) {
+      ratio = ascent / (ascent + descent);
+    } else {
+      if (FeatureTest.platform.isFirefox) {
+        warn("Enable the `dom.textMetrics.fontBoundingBox.enabled` preference " + "in `about:config` to improve TextLayer rendering.");
+      }
+      if (style.ascent) {
+        ratio = style.ascent;
+      } else if (style.descent) {
+        ratio = 1 + style.descent;
+      }
+    }
+    this.#ascentCache.set(fontFamily, ratio);
+    return ratio;
+  }
+}
+
+;// ./src/display/api.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const RENDERING_CANCELLED_TIMEOUT = 100;
+function getDocument(src = {}) {
+  const task = new PDFDocumentLoadingTask();
+  const {
+    docId
+  } = task;
+  const url = src.url ? getUrlProp(src.url) : null;
+  const data = src.data ? getDataProp(src.data) : null;
+  const httpHeaders = src.httpHeaders || null;
+  const withCredentials = src.withCredentials === true;
+  const password = src.password ?? null;
+  const rangeTransport = src.range instanceof PDFDataRangeTransport ? src.range : null;
+  const rangeChunkSize = Number.isInteger(src.rangeChunkSize) && src.rangeChunkSize > 0 ? src.rangeChunkSize : 2 ** 16;
+  let worker = src.worker instanceof PDFWorker ? src.worker : null;
+  const verbosity = src.verbosity;
+  const docBaseUrl = typeof src.docBaseUrl === "string" && !isDataScheme(src.docBaseUrl) ? src.docBaseUrl : null;
+  const cMapUrl = getFactoryUrlProp(src.cMapUrl);
+  const cMapPacked = src.cMapPacked !== false;
+  const iccUrl = getFactoryUrlProp(src.iccUrl);
+  const standardFontDataUrl = getFactoryUrlProp(src.standardFontDataUrl);
+  const wasmUrl = getFactoryUrlProp(src.wasmUrl);
+  const ignoreErrors = src.stopAtErrors !== true;
+  const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
+  const isOffscreenCanvasSupported = typeof src.isOffscreenCanvasSupported === "boolean" ? src.isOffscreenCanvasSupported : !isNodeJS;
+  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS;
+  const canvasMaxAreaInBytes = Number.isInteger(src.canvasMaxAreaInBytes) ? src.canvasMaxAreaInBytes : -1;
+  const disableFontFace = typeof src.disableFontFace === "boolean" ? src.disableFontFace : isNodeJS;
+  const fontExtraProperties = src.fontExtraProperties === true;
+  const enableXfa = src.enableXfa === true;
+  const ownerDocument = src.ownerDocument || globalThis.document;
+  const disableRange = src.disableRange === true;
+  const disableStream = src.disableStream === true;
+  const disableAutoFetch = src.disableAutoFetch === true;
+  const pdfBug = src.pdfBug === true;
+  const CanvasFactory = src.CanvasFactory || (isNodeJS ? NodeCanvasFactory : DOMCanvasFactory);
+  const FilterFactory = src.FilterFactory || (isNodeJS ? NodeFilterFactory : DOMFilterFactory);
+  const BinaryDataFactory = src.BinaryDataFactory || (isNodeJS ? NodeBinaryDataFactory : DOMBinaryDataFactory);
+  const enableHWA = src.enableHWA === true;
+  const enableWebGPU = src.enableWebGPU === true;
+  const gpuPromise = enableWebGPU ? initGPU() : Promise.resolve(false);
+  const useWasm = src.useWasm !== false;
+  const pagesMapper = src.pagesMapper || new PagesMapper();
+  const useSystemFonts = typeof src.useSystemFonts === "boolean" ? src.useSystemFonts : !isNodeJS && !disableFontFace;
+  const useWorkerFetch = typeof src.useWorkerFetch === "boolean" ? src.useWorkerFetch : !!(BinaryDataFactory === DOMBinaryDataFactory && cMapUrl && cMapPacked && standardFontDataUrl && wasmUrl && isValidFetchUrl(cMapUrl, document.baseURI) && isValidFetchUrl(standardFontDataUrl, document.baseURI) && isValidFetchUrl(wasmUrl, document.baseURI));
+  const styleElement = null;
+  setVerbosityLevel(verbosity);
+  const transportFactory = {
+    canvasFactory: new CanvasFactory({
+      ownerDocument,
+      enableHWA
+    }),
+    filterFactory: new FilterFactory({
+      docId,
+      ownerDocument
+    }),
+    binaryDataFactory: useWorkerFetch ? null : new BinaryDataFactory({
+      cMapUrl,
+      standardFontDataUrl,
+      wasmUrl
+    })
+  };
+  if (!worker) {
+    worker = PDFWorker.create({
+      verbosity,
+      port: GlobalWorkerOptions.workerPort
+    });
+    task._worker = worker;
+  }
+  const docParams = {
+    docId,
+    apiVersion: "6.4.299",
+    data,
+    password,
+    disableAutoFetch,
+    rangeChunkSize,
+    docBaseUrl,
+    enableXfa,
+    evaluatorOptions: {
+      maxImageSize,
+      disableFontFace,
+      ignoreErrors,
+      isOffscreenCanvasSupported,
+      isImageDecoderSupported,
+      canvasMaxAreaInBytes,
+      fontExtraProperties,
+      useSystemFonts,
+      useWasm,
+      useWorkerFetch,
+      cMapUrl,
+      cMapPacked,
+      iccUrl,
+      standardFontDataUrl,
+      wasmUrl,
+      hasGPU: false
+    }
+  };
+  const transportParams = {
+    ownerDocument,
+    pdfBug,
+    styleElement,
+    enableHWA,
+    loadingParams: {
+      disableAutoFetch,
+      enableXfa
+    }
+  };
+  Promise.all([worker.promise, gpuPromise]).then(function ([, hasGPU]) {
+    if (worker.destroyed) {
+      throw new Error("Worker was destroyed");
+    }
+    docParams.evaluatorOptions.hasGPU = hasGPU;
+    const workerIdPromise = worker.messageHandler.sendWithPromise("GetDocRequest", docParams, data ? [data.buffer] : null);
+    let networkStream;
+    if (data) {} else if (rangeTransport) {
+      networkStream = new PDFDataTransportStream({
+        pdfDataRangeTransport: rangeTransport,
+        disableRange,
+        disableStream
+      });
+    } else if (url) {
+      const NetworkStream = getNetworkStream(url);
+      networkStream = new NetworkStream({
+        url,
+        httpHeaders,
+        withCredentials,
+        rangeChunkSize,
+        disableRange,
+        disableStream
+      });
+    } else {
+      throw new Error("getDocument - expected either `data`, `range`, or `url` parameter.");
+    }
+    return workerIdPromise.then(workerId => {
+      if (worker.destroyed) {
+        throw new Error("Worker was destroyed");
+      }
+      const messageHandler = new MessageHandler(docId, workerId, worker.port);
+      const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory, pagesMapper);
+      task._transport = transport;
+      if (task.destroyed) {
+        throw new Error("Loading aborted");
+      }
+      messageHandler.send("Ready", null);
+    });
+  }).catch(task._capability.reject).finally(task._setupCapability.resolve);
+  return task;
+}
+class PDFDocumentLoadingTask {
+  static #docId = 0;
+  _capability = Promise.withResolvers();
+  _setupCapability = Promise.withResolvers();
+  _transport = null;
+  _worker = null;
+  docId = `d${PDFDocumentLoadingTask.#docId++}`;
+  destroyed = false;
+  onPassword = null;
+  onProgress = null;
+  get promise() {
+    return this._capability.promise;
+  }
+  async destroy() {
+    this.destroyed = true;
+    this._capability.promise.catch(() => {});
+    try {
+      if (this._worker?.port) {
+        this._worker._pendingDestroy = true;
+      }
+      await this._setupCapability.promise;
+      await this._transport?.destroy();
+    } catch (ex) {
+      if (this._worker?.port) {
+        delete this._worker._pendingDestroy;
+      }
+      throw ex;
+    }
+    this._transport = null;
+    this._worker?.destroy();
+    this._worker = null;
+  }
+  async getData() {
+    return this._transport.getData();
+  }
+}
+class PDFDataRangeTransport {
+  #capability = Promise.withResolvers();
+  #listener = null;
+  constructor(length, initialData, progressiveDone = false, contentDispositionFilename = null) {
+    this.length = length;
+    this.initialData = initialData;
+    this.progressiveDone = progressiveDone;
+    this.contentDispositionFilename = contentDispositionFilename;
+  }
+  onDataRange(begin, chunk) {
+    this.#listener({
+      type: "range",
+      begin,
+      chunk
+    });
+  }
+  onDataProgressiveRead(chunk) {
+    this.#capability.promise.then(() => {
+      this.#listener({
+        type: "progressiveRead",
+        chunk
+      });
+    });
+  }
+  onDataProgressiveDone() {
+    this.#capability.promise.then(() => {
+      this.#listener({
+        type: "progressiveDone"
+      });
+    });
+  }
+  transportReady(listener) {
+    this.#listener = listener;
+    this.#capability.resolve();
+  }
+  requestDataRange(begin, end) {
+    unreachable("Abstract method PDFDataRangeTransport.requestDataRange");
+  }
+  abort() {}
+}
+class PDFDocumentProxy {
+  constructor(pdfInfo, transport) {
+    this._pdfInfo = pdfInfo;
+    this._transport = transport;
+  }
+  get pagesMapper() {
+    return this._transport.pagesMapper;
+  }
+  get annotationStorage() {
+    return this._transport.annotationStorage;
+  }
+  get canvasFactory() {
+    return this._transport.canvasFactory;
+  }
+  get filterFactory() {
+    return this._transport.filterFactory;
+  }
+  get numPages() {
+    return this._pdfInfo.numPages;
+  }
+  get fingerprints() {
+    return this._pdfInfo.fingerprints;
+  }
+  get isPureXfa() {
+    return util_shadow(this, "isPureXfa", !!this._transport._htmlForXfa);
+  }
+  get allXfaHtml() {
+    return this._transport._htmlForXfa;
+  }
+  getPage(pageNumber) {
+    return this._transport.getPage(pageNumber);
+  }
+  getPageIndex(ref) {
+    return this._transport.getPageIndex(ref);
+  }
+  getDestinations() {
+    return this._transport.getDestinations();
+  }
+  getDestination(id) {
+    return this._transport.getDestination(id);
+  }
+  getPageLabels() {
+    return this._transport.getPageLabels();
+  }
+  getPageLayout() {
+    return this._transport.getPageLayout();
+  }
+  getPageMode() {
+    return this._transport.getPageMode();
+  }
+  getViewerPreferences() {
+    return this._transport.getViewerPreferences();
+  }
+  getOpenAction() {
+    return this._transport.getOpenAction();
+  }
+  getAttachments() {
+    return this._transport.getAttachments();
+  }
+  getAttachmentContent(id) {
+    return this._transport.getAttachmentContent(id);
+  }
+  getAnnotationsByType(types, pageIndexesToSkip) {
+    return this._transport.getAnnotationsByType(types, pageIndexesToSkip);
+  }
+  getJSActions() {
+    return this._transport.getDocJSActions();
+  }
+  getOutline() {
+    return this._transport.getOutline();
+  }
+  getOptionalContentConfig({
+    intent = "display"
+  } = {}) {
+    const {
+      renderingIntent
+    } = this._transport.getRenderingIntent(intent);
+    return this._transport.getOptionalContentConfig(renderingIntent);
+  }
+  getPermissions() {
+    return this._transport.getPermissions();
+  }
+  getMetadata() {
+    return this._transport.getMetadata();
+  }
+  getMarkInfo() {
+    return this._transport.getMarkInfo();
+  }
+  getData() {
+    return this._transport.getData();
+  }
+  saveDocument(printToPDF) {
+    return this._transport.saveDocument(printToPDF);
+  }
+  extractPages(pageInfos, copyLevels = null) {
+    return this._transport.extractPages(pageInfos, copyLevels);
+  }
+  getDownloadInfo() {
+    return this._transport.downloadInfoCapability.promise;
+  }
+  cleanup(keepLoadedFonts = false) {
+    return this._transport.startCleanup(keepLoadedFonts || this.isPureXfa);
+  }
+  cachedPageNumber(ref) {
+    return this._transport.cachedPageNumber(ref);
+  }
+  get loadingParams() {
+    return this._transport.loadingParams;
+  }
+  get loadingTask() {
+    return this._transport.loadingTask;
+  }
+  getFieldObjects() {
+    return this._transport.getFieldObjects();
+  }
+  getSignatures() {
+    return this._transport.getSignatures();
+  }
+  getSignatureData(id) {
+    return this._transport.getSignatureData(id);
+  }
+  hasJSActions() {
+    return this._transport.hasJSActions();
+  }
+  getCalculationOrderIds() {
+    return this._transport.getCalculationOrderIds();
+  }
+}
+class PDFPageProxy {
+  #pendingCleanup = false;
+  #pagesMapper = null;
+  static #idCounter = 0;
+  constructor(pageIndex, pageInfo, transport, pagesMapper, pdfBug = false) {
+    this._pageIndex = pageIndex;
+    this._id = PDFPageProxy.#idCounter++;
+    this._pageInfo = pageInfo;
+    this._transport = transport;
+    this._stats = pdfBug ? new StatTimer() : null;
+    this._pdfBug = pdfBug;
+    this.commonObjs = transport.commonObjs;
+    this.objs = new PDFObjects();
+    this._intentStates = new Map();
+    this.destroyed = false;
+    this.recordedBBoxes = null;
+    this.#pagesMapper = pagesMapper;
+    this.imageCoordinates = null;
+  }
+  clone(id) {
+    const clone = new PDFPageProxy(id, this._pageInfo, this._transport, this.#pagesMapper, this._pdfBug);
+    clone.clonedFromIndex = this.clonedFromIndex ?? this._pageIndex;
+    this._transport.updatePage(clone);
+    return clone;
+  }
+  get pageNumber() {
+    return this._pageIndex + 1;
+  }
+  set pageNumber(value) {
+    this._pageIndex = value - 1;
+    this._transport.updatePage(this);
+  }
+  get rotate() {
+    return this._pageInfo.rotate;
+  }
+  get ref() {
+    return this._pageInfo.ref;
+  }
+  get userUnit() {
+    return this._pageInfo.userUnit;
+  }
+  get view() {
+    return this._pageInfo.view;
+  }
+  getViewport({
+    scale,
+    rotation = this.rotate,
+    offsetX = 0,
+    offsetY = 0,
+    dontFlip = false
+  } = {}) {
+    return new PageViewport({
+      viewBox: this.view,
+      userUnit: this.userUnit,
+      scale,
+      rotation,
+      offsetX,
+      offsetY,
+      dontFlip
+    });
+  }
+  getAnnotations({
+    intent = "display"
+  } = {}) {
+    const {
+      renderingIntent
+    } = this._transport.getRenderingIntent(intent);
+    return this._transport.getAnnotations(this._pageIndex, renderingIntent);
+  }
+  getJSActions() {
+    return this._transport.getPageJSActions(this._pageIndex);
+  }
+  get filterFactory() {
+    return this._transport.filterFactory;
+  }
+  get isPureXfa() {
+    return util_shadow(this, "isPureXfa", !!this._transport._htmlForXfa);
+  }
+  async getXfa() {
+    return this._transport._htmlForXfa?.children[this._pageIndex] || null;
+  }
+  render({
+    canvasContext,
+    canvas = canvasContext.canvas,
+    viewport,
+    intent = "display",
+    annotationMode = AnnotationMode.ENABLE,
+    transform = null,
+    background = null,
+    optionalContentConfigPromise = null,
+    annotationCanvasMap = null,
+    pageColors = null,
+    printAnnotationStorage = null,
+    isEditing = false,
+    recordImages = false,
+    recordOperations = false,
+    operationsFilter = null
+  }) {
+    this._stats?.time("Overall");
+    const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage, isEditing);
+    const {
+      renderingIntent,
+      cacheKey
+    } = intentArgs;
+    this.#pendingCleanup = false;
+    optionalContentConfigPromise ||= this._transport.getOptionalContentConfig(renderingIntent);
+    const intentState = this._intentStates.getOrInsertComputed(cacheKey, makeObj);
+    if (intentState.streamReaderCancelTimeout) {
+      clearTimeout(intentState.streamReaderCancelTimeout);
+      intentState.streamReaderCancelTimeout = null;
+    }
+    const intentPrint = !!(renderingIntent & RenderingIntentFlag.PRINT);
+    if (!intentState.displayReadyCapability) {
+      intentState.displayReadyCapability = Promise.withResolvers();
+      intentState.operatorList = {
+        fnArray: [],
+        argsArray: [],
+        lastChunk: false,
+        separateAnnots: null
+      };
+      this._stats?.time("Page Request");
+      this._pumpOperatorList(intentArgs);
+    }
+    const recordForDebugger = !!(this._pdfBug && globalThis.StepperManager?.enabled);
+    const shouldRecordOperations = !!canvas && !this.recordedBBoxes && (recordOperations || recordForDebugger);
+    const shouldRecordImages = !!canvas && !this.imageCoordinates && recordImages;
+    const complete = error => {
+      intentState.renderTasks.delete(internalRenderTask);
+      if (shouldRecordOperations) {
+        const recordedBBoxes = internalRenderTask.gfx?.dependencyTracker.take();
+        if (recordedBBoxes) {
+          internalRenderTask.stepper?.setOperatorBBoxes(recordedBBoxes, internalRenderTask.gfx.dependencyTracker.takeDebugMetadata());
+          if (recordOperations) {
+            this.recordedBBoxes = recordedBBoxes;
+          }
+        }
+      }
+      if (shouldRecordImages && !error) {
+        this.imageCoordinates = internalRenderTask.gfx?.imagesTracker.take();
+      }
+      if (intentPrint) {
+        this.#pendingCleanup = true;
+      }
+      this.#tryCleanup();
+      if (error) {
+        internalRenderTask.capability.reject(error);
+        this._abortOperatorList({
+          intentState,
+          reason: error instanceof Error ? error : new Error(error)
+        });
+      } else {
+        internalRenderTask.capability.resolve();
+      }
+      if (this._stats) {
+        this._stats.timeEnd("Rendering");
+        this._stats.timeEnd("Overall");
+        if (globalThis.Stats?.enabled) {
+          globalThis.Stats.add(this.pageNumber, this._stats);
+        }
+      }
+    };
+    let dependencyTracker = null;
+    let bboxTracker = null;
+    if (shouldRecordOperations || shouldRecordImages) {
+      bboxTracker = new CanvasBBoxTracker(canvas, intentState.operatorList.length);
+    }
+    if (shouldRecordOperations) {
+      dependencyTracker = new CanvasDependencyTracker(bboxTracker, recordForDebugger);
+    }
+    const internalRenderTask = new InternalRenderTask({
+      callback: complete,
+      params: {
+        canvas,
+        canvasContext,
+        dependencyTracker: dependencyTracker ?? bboxTracker,
+        imagesTracker: shouldRecordImages ? new CanvasImagesTracker(canvas) : null,
+        viewport,
+        transform,
+        background
+      },
+      objs: this.objs,
+      commonObjs: this.commonObjs,
+      annotationCanvasMap,
+      operatorList: intentState.operatorList,
+      pageIndex: this._pageIndex,
+      canvasFactory: this._transport.canvasFactory,
+      filterFactory: this._transport.filterFactory,
+      useRequestAnimationFrame: !intentPrint,
+      pdfBug: this._pdfBug,
+      pageColors,
+      enableHWA: this._transport.enableHWA,
+      operationsFilter
+    });
+    (intentState.renderTasks ||= new Set()).add(internalRenderTask);
+    const renderTask = internalRenderTask.task;
+    Promise.all([intentState.displayReadyCapability.promise, optionalContentConfigPromise]).then(([transparency, optionalContentConfig]) => {
+      if (this.destroyed) {
+        complete();
+        return;
+      }
+      this._stats?.time("Rendering");
+      if (!(optionalContentConfig.renderingIntent & renderingIntent)) {
+        throw new Error("Must use the same `intent`-argument when calling the `PDFPageProxy.render` " + "and `PDFDocumentProxy.getOptionalContentConfig` methods.");
+      }
+      internalRenderTask.initializeGraphics({
+        transparency,
+        optionalContentConfig
+      });
+      internalRenderTask.operatorListChanged();
+    }).catch(complete);
+    return renderTask;
+  }
+  getOperatorList({
+    intent = "display",
+    annotationMode = AnnotationMode.ENABLE,
+    printAnnotationStorage = null,
+    isEditing = false
+  } = {}) {
+    function operatorListChanged() {
+      if (intentState.operatorList.lastChunk) {
+        intentState.opListReadCapability.resolve(intentState.operatorList);
+        intentState.renderTasks.delete(opListTask);
+      }
+    }
+    const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage, isEditing, true);
+    const intentState = this._intentStates.getOrInsertComputed(intentArgs.cacheKey, makeObj);
+    let opListTask;
+    if (!intentState.opListReadCapability) {
+      opListTask = Object.create(null);
+      opListTask.operatorListChanged = operatorListChanged;
+      intentState.opListReadCapability = Promise.withResolvers();
+      (intentState.renderTasks ||= new Set()).add(opListTask);
+      intentState.operatorList = {
+        fnArray: [],
+        argsArray: [],
+        lastChunk: false,
+        separateAnnots: null
+      };
+      this._stats?.time("Page Request");
+      this._pumpOperatorList(intentArgs);
+    }
+    return intentState.opListReadCapability.promise;
+  }
+  streamTextContent({
+    includeMarkedContent = false,
+    disableNormalization = false
+  } = {}) {
+    const TEXT_CONTENT_CHUNK_SIZE = 100;
+    return this._transport.messageHandler.sendWithStream("GetTextContent", {
+      pageId: this.#pagesMapper.getPageId(this._pageIndex + 1) - 1,
+      pageIndex: this._pageIndex,
+      includeMarkedContent: includeMarkedContent === true,
+      disableNormalization: disableNormalization === true
+    }, {
+      highWaterMark: TEXT_CONTENT_CHUNK_SIZE,
+      size: textContent => textContent.items.length
+    });
+  }
+  async getTextContent(params = {}) {
+    if (this._transport._htmlForXfa) {
+      return this.getXfa().then(xfa => XfaText.textContent(xfa));
+    }
+    const readableStream = this.streamTextContent(params);
+    const textContent = {
+      items: [],
+      styles: Object.create(null),
+      lang: null
+    };
+    for await (const value of readableStream) {
+      textContent.lang ??= value.lang;
+      Object.assign(textContent.styles, value.styles);
+      textContent.items.push(...value.items);
+    }
+    return textContent;
+  }
+  getStructTree() {
+    return this._transport.getStructTree(this._pageIndex);
+  }
+  _destroy() {
+    this.destroyed = true;
+    const waitOn = [];
+    for (const intentState of this._intentStates.values()) {
+      this._abortOperatorList({
+        intentState,
+        reason: new Error("Page was destroyed."),
+        force: true
+      });
+      if (intentState.opListReadCapability) {
+        continue;
+      }
+      for (const internalRenderTask of intentState.renderTasks) {
+        waitOn.push(internalRenderTask.completed);
+        internalRenderTask.cancel();
+      }
+    }
+    this.objs.clear();
+    this.#pendingCleanup = false;
+    return Promise.all(waitOn);
+  }
+  cleanup(resetStats = false) {
+    this.#pendingCleanup = true;
+    const success = this.#tryCleanup();
+    if (resetStats && success) {
+      this._stats &&= new StatTimer();
+    }
+    return success;
+  }
+  #tryCleanup() {
+    if (!this.#pendingCleanup || this.destroyed) {
+      return false;
+    }
+    for (const {
+      renderTasks,
+      operatorList
+    } of this._intentStates.values()) {
+      if (renderTasks.size > 0 || !operatorList.lastChunk) {
+        return false;
+      }
+    }
+    this._intentStates.clear();
+    this.objs.clear();
+    this.#pendingCleanup = false;
+    return true;
+  }
+  _startRenderPage(transparency, cacheKey) {
+    const intentState = this._intentStates.get(cacheKey);
+    if (!intentState) {
+      return;
+    }
+    this._stats?.timeEnd("Page Request");
+    intentState.displayReadyCapability?.resolve(transparency);
+  }
+  _renderPageChunk(operatorListChunk, intentState) {
+    for (let i = 0, ii = operatorListChunk.length; i < ii; i++) {
+      intentState.operatorList.fnArray.push(operatorListChunk.fnArray[i]);
+      intentState.operatorList.argsArray.push(operatorListChunk.argsArray[i]);
+    }
+    intentState.operatorList.lastChunk = operatorListChunk.lastChunk;
+    intentState.operatorList.separateAnnots = operatorListChunk.separateAnnots;
+    for (const internalRenderTask of intentState.renderTasks) {
+      internalRenderTask.operatorListChanged();
+    }
+    if (operatorListChunk.lastChunk) {
+      this.#tryCleanup();
+    }
+  }
+  _pumpOperatorList({
+    renderingIntent,
+    cacheKey,
+    annotationStorageSerializable,
+    modifiedIds
+  }) {
+    const {
+      map,
+      transfer
+    } = annotationStorageSerializable;
+    const readableStream = this._transport.messageHandler.sendWithStream("GetOperatorList", {
+      pageId: this.#pagesMapper.getPageId(this._pageIndex + 1) - 1,
+      pageIndex: this._pageIndex,
+      pageProxyId: this._id,
+      intent: renderingIntent,
+      cacheKey,
+      annotationStorage: map,
+      modifiedIds
+    }, undefined, transfer);
+    const reader = readableStream.getReader();
+    const intentState = this._intentStates.get(cacheKey);
+    intentState.streamReader = reader;
+    const pump = () => {
+      reader.read().then(({
+        value,
+        done
+      }) => {
+        if (done) {
+          intentState.streamReader = null;
+          return;
+        }
+        if (this._transport.destroyed) {
+          return;
+        }
+        this._renderPageChunk(value, intentState);
+        pump();
+      }, reason => {
+        intentState.streamReader = null;
+        if (this._transport.destroyed) {
+          return;
+        }
+        if (intentState.operatorList) {
+          intentState.operatorList.lastChunk = true;
+          for (const internalRenderTask of intentState.renderTasks) {
+            internalRenderTask.operatorListChanged();
+          }
+          this.#tryCleanup();
+        }
+        if (intentState.displayReadyCapability) {
+          intentState.displayReadyCapability.reject(reason);
+        } else if (intentState.opListReadCapability) {
+          intentState.opListReadCapability.reject(reason);
+        } else {
+          throw reason;
+        }
+      });
+    };
+    pump();
+  }
+  _abortOperatorList({
+    intentState,
+    reason,
+    force = false
+  }) {
+    if (!intentState.streamReader) {
+      return;
+    }
+    if (intentState.streamReaderCancelTimeout) {
+      clearTimeout(intentState.streamReaderCancelTimeout);
+      intentState.streamReaderCancelTimeout = null;
+    }
+    if (!force) {
+      if (intentState.renderTasks.size > 0) {
+        return;
+      }
+      if (reason instanceof RenderingCancelledException) {
+        let delay = RENDERING_CANCELLED_TIMEOUT;
+        if (reason.extraDelay > 0 && reason.extraDelay < 1000) {
+          delay += reason.extraDelay;
+        }
+        intentState.streamReaderCancelTimeout = setTimeout(() => {
+          intentState.streamReaderCancelTimeout = null;
+          this._abortOperatorList({
+            intentState,
+            reason,
+            force: true
+          });
+        }, delay);
+        return;
+      }
+    }
+    intentState.streamReader.cancel(new AbortException(reason.message)).catch(() => {});
+    intentState.streamReader = null;
+    if (this._transport.destroyed) {
+      return;
+    }
+    for (const [curCacheKey, curIntentState] of this._intentStates) {
+      if (curIntentState === intentState) {
+        this._intentStates.delete(curCacheKey);
+        break;
+      }
+    }
+    this.cleanup();
+  }
+  get stats() {
+    return this._stats;
+  }
+}
+class PDFWorker {
+  #capability = Promise.withResolvers();
+  #messageHandler = null;
+  #port = null;
+  #webWorker = null;
+  static #fakeWorkerId = 0;
+  static #isWorkerDisabled = false;
+  static #workerPorts = new WeakMap();
+  static {
+    if (isNodeJS) {
+      this.#isWorkerDisabled = true;
+      GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
+    }
+    this._isSameOrigin = (baseUrl, otherUrl) => {
+      const base = URL.parse(baseUrl);
+      if (!base?.origin || base.origin === "null") {
+        return false;
+      }
+      const other = new URL(otherUrl, base);
+      return base.origin === other.origin;
+    };
+    this._createCDNWrapper = url => {
+      const wrapper = `await import("${url}");`;
+      return URL.createObjectURL(new Blob([wrapper], {
+        type: "text/javascript"
+      }));
+    };
+  }
+  constructor({
+    name = null,
+    port = null,
+    verbosity = getVerbosityLevel()
+  } = {}) {
+    this.name = name;
+    this.destroyed = false;
+    this.verbosity = verbosity;
+    if (port) {
+      if (PDFWorker.#workerPorts.has(port)) {
+        throw new Error("Cannot use more than one PDFWorker per port.");
+      }
+      PDFWorker.#workerPorts.set(port, this);
+      this.#initializeFromPort(port);
+    } else {
+      this.#initialize();
+    }
+  }
+  get promise() {
+    return this.#capability.promise;
+  }
+  #resolve() {
+    this.#capability.resolve();
+    this.#messageHandler.send("configure", {
+      verbosity: this.verbosity
+    });
+  }
+  get port() {
+    return this.#port;
+  }
+  get messageHandler() {
+    return this.#messageHandler;
+  }
+  #initializeFromPort(port) {
+    this.#port = port;
+    this.#messageHandler = new MessageHandler("main", "worker", port);
+    this.#messageHandler.on("ready", () => {});
+    this.#resolve();
+  }
+  #initialize() {
+    if (PDFWorker.#isWorkerDisabled || PDFWorker.#mainThreadWorkerMessageHandler) {
+      this.#setupFakeWorker();
+      return;
+    }
+    let {
+      workerSrc
+    } = PDFWorker;
+    try {
+      if (!PDFWorker._isSameOrigin(window.location, workerSrc)) {
+        workerSrc = PDFWorker._createCDNWrapper(new URL(workerSrc, window.location).href);
+      }

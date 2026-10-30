@@ -1,0 +1,1000 @@
+    this.#eventBus.dispatch("switchannotationeditorparams", {
+      source: this,
+      type: AnnotationEditorParamsType.HIGHLIGHT_COLOR,
+      value: color
+    });
+    this.update(color);
+  }
+  _colorSelectFromKeyboard(event) {
+    if (event.target === this.#button) {
+      this.#openDropdown(event);
+      return;
+    }
+    const color = event.target.getAttribute("data-color");
+    if (!color) {
+      return;
+    }
+    this.#colorSelect(color, event);
+  }
+  _moveToNext(event) {
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+      return;
+    }
+    if (event.target === this.#button) {
+      this.#dropdown.firstElementChild?.focus();
+      return;
+    }
+    event.target.nextSibling?.focus();
+  }
+  _moveToPrevious(event) {
+    if (event.target === this.#dropdown?.firstElementChild || event.target === this.#button) {
+      if (this.#isDropdownVisible) {
+        this._hideDropdownFromKeyboard();
+      }
+      return;
+    }
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+    }
+    event.target.previousSibling?.focus();
+  }
+  _moveToBeginning(event) {
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+      return;
+    }
+    this.#dropdown.firstElementChild?.focus();
+  }
+  _moveToEnd(event) {
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+      return;
+    }
+    this.#dropdown.lastElementChild?.focus();
+  }
+  #keyDown(event) {
+    ColorPicker._keyboardManager.exec(this, event);
+  }
+  #openDropdown(event) {
+    if (this.#isDropdownVisible) {
+      this.hideDropdown();
+      return;
+    }
+    this.#dropdownWasFromKeyboard = event.detail === 0;
+    if (!this.#openDropdownAC) {
+      this.#openDropdownAC = new AbortController();
+      window.addEventListener("pointerdown", this.#pointerDown.bind(this), {
+        signal: this.#uiManager.combinedSignal(this.#openDropdownAC)
+      });
+    }
+    this.#button.ariaExpanded = "true";
+    if (this.#dropdown) {
+      this.#dropdown.classList.remove("hidden");
+      return;
+    }
+    const root = this.#dropdown = this.#getDropdownRoot();
+    this.#button.append(root);
+  }
+  #pointerDown(event) {
+    if (this.#dropdown?.contains(event.target)) {
+      return;
+    }
+    this.hideDropdown();
+  }
+  hideDropdown() {
+    this.#dropdown?.classList.add("hidden");
+    this.#button.ariaExpanded = "false";
+    this.#openDropdownAC?.abort();
+    this.#openDropdownAC = null;
+  }
+  get #isDropdownVisible() {
+    return this.#dropdown && !this.#dropdown.classList.contains("hidden");
+  }
+  _hideDropdownFromKeyboard() {
+    if (this.#isMainColorPicker) {
+      return;
+    }
+    if (!this.#isDropdownVisible) {
+      this.#editor?.unselect();
+      return;
+    }
+    this.hideDropdown();
+    this.#button.focus({
+      preventScroll: true,
+      focusVisible: this.#dropdownWasFromKeyboard
+    });
+  }
+  update(color) {
+    if (this.#buttonSwatch) {
+      this.#buttonSwatch.style.backgroundColor = color;
+    }
+    if (!this.#dropdown) {
+      return;
+    }
+    const i = this.#uiManager.highlightColors.values();
+    for (const child of this.#dropdown.children) {
+      child.ariaSelected = i.next().value === color.toUpperCase();
+    }
+  }
+  destroy() {
+    this.#button?.remove();
+    this.#button = null;
+    this.#buttonSwatch = null;
+    this.#dropdown?.remove();
+    this.#dropdown = null;
+  }
+}
+class BasicColorPicker {
+  #input = null;
+  #hasAlpha = false;
+  #editor = null;
+  #uiManager = null;
+  static #l10nColor = null;
+  constructor(editor) {
+    this.#editor = editor;
+    this.#uiManager = editor._uiManager;
+    BasicColorPicker.#l10nColor ||= Object.freeze({
+      freetext: "pdfjs-editor-color-picker-free-text-input",
+      ink: "pdfjs-editor-color-picker-ink-input"
+    });
+  }
+  renderButton() {
+    if (this.#input) {
+      return this.#input;
+    }
+    const {
+      editorType,
+      colorType,
+      colorAndOpacityType,
+      opacityType,
+      color,
+      opacity
+    } = this.#editor;
+    const hasAlpha = this.#hasAlpha = FeatureTest.isAlphaColorInputSupported && opacityType !== undefined;
+    const input = this.#input = document.createElement("input");
+    input.type = "color";
+    if (hasAlpha) {
+      input.setAttribute("alpha", "");
+      const alphaHex = Util.hexNums[Math.round((opacity ?? 1) * 255)];
+      input.value = (color || "#000000") + alphaHex;
+    } else {
+      input.value = color || "#000000";
+    }
+    input.className = "basicColorPicker";
+    input.tabIndex = 0;
+    input.setAttribute("data-l10n-id", BasicColorPicker.#l10nColor[editorType]);
+    input.addEventListener("input", () => {
+      if (hasAlpha) {
+        const rgba = getRGBA(input.value);
+        if (!rgba) {
+          return;
+        }
+        const [r, g, b, op] = rgba;
+        const hex = Util.makeHexColor(r, g, b);
+        if (colorAndOpacityType !== undefined) {
+          this.#uiManager.updateParams(colorAndOpacityType, {
+            color: hex,
+            opacity: op
+          });
+        } else {
+          this.#uiManager.updateParams(colorType, hex);
+          this.#uiManager.updateParams(opacityType, op);
+        }
+      } else {
+        this.#uiManager.updateParams(colorType, input.value);
+      }
+    }, {
+      signal: this.#uiManager._signal
+    });
+    return input;
+  }
+  update(value) {
+    if (!this.#input) {
+      return;
+    }
+    if (this.#hasAlpha) {
+      const alphaHex = Util.hexNums[Math.round(this.#editor.opacity * 255)];
+      this.#input.value = value + alphaHex;
+    } else {
+      this.#input.value = value;
+    }
+  }
+  updateOpacity(value) {
+    if (!this.#input || !this.#hasAlpha) {
+      return;
+    }
+    const alphaHex = Util.hexNums[Math.round(value * 255)];
+    this.#input.value = this.#editor.color + alphaHex;
+  }
+  destroy() {
+    this.#input?.remove();
+    this.#input = null;
+  }
+  hideDropdown() {}
+}
+
+;// ./node_modules/core-js/modules/es.iterator.flat-map.js
+es_iterator_flat_map_namespaceFn();
+
+;// ./src/shared/scripting_utils.js
+
+
+
+function makeColorComp(n) {
+  return Math.floor(MathClamp(n, 0, 1) * 255).toString(16).padStart(2, "0");
+}
+function scaleAndClamp(x) {
+  return MathClamp(x, 0, 1) * 255;
+}
+class ColorConverters {
+  static CMYK_G([c, y, m, k]) {
+    return ["G", 1 - Math.min(1, 0.3 * c + 0.59 * m + 0.11 * y + k)];
+  }
+  static G_CMYK([g]) {
+    return ["CMYK", 0, 0, 0, 1 - g];
+  }
+  static G_RGB([g]) {
+    return ["RGB", g, g, g];
+  }
+  static G_rgb([g]) {
+    g = scaleAndClamp(g);
+    return [g, g, g];
+  }
+  static G_HTML([g]) {
+    const G = makeColorComp(g);
+    return `#${G}${G}${G}`;
+  }
+  static RGB_G([r, g, b]) {
+    return ["G", 0.3 * r + 0.59 * g + 0.11 * b];
+  }
+  static RGB_rgb(color) {
+    return color.map(scaleAndClamp);
+  }
+  static RGB_HTML(color) {
+    return `#${color.map(makeColorComp).join("")}`;
+  }
+  static T_HTML() {
+    return "#00000000";
+  }
+  static T_rgb() {
+    return [null];
+  }
+  static CMYK_RGB([c, y, m, k]) {
+    return ["RGB", 1 - Math.min(1, c + k), 1 - Math.min(1, m + k), 1 - Math.min(1, y + k)];
+  }
+  static CMYK_rgb([c, y, m, k]) {
+    return [scaleAndClamp(1 - Math.min(1, c + k)), scaleAndClamp(1 - Math.min(1, m + k)), scaleAndClamp(1 - Math.min(1, y + k))];
+  }
+  static CMYK_HTML(components) {
+    const rgb = this.CMYK_RGB(components).slice(1);
+    return this.RGB_HTML(rgb);
+  }
+  static RGB_CMYK([r, g, b]) {
+    const c = 1 - r;
+    const m = 1 - g;
+    const y = 1 - b;
+    const k = Math.min(c, m, y);
+    return ["CMYK", c, m, y, k];
+  }
+}
+const DateFormats = (/* unused pure expression or super */ null && (["m/d", "m/d/yy", "mm/dd/yy", "mm/yy", "d-mmm", "d-mmm-yy", "dd-mmm-yy", "yy-mm-dd", "mmm-yy", "mmmm-yy", "mmm d, yyyy", "mmmm d, yyyy", "m/d/yy h:MM tt", "m/d/yy HH:MM"]));
+const TimeFormats = (/* unused pure expression or super */ null && (["HH:MM", "h:MM tt", "HH:MM:ss", "h:MM:ss tt"]));
+
+;// ./src/display/svg_factory.js
+
+class BaseSVGFactory {
+  create(width, height, skipDimensions = false) {
+    if (width <= 0 || height <= 0) {
+      throw new Error("Invalid SVG dimensions");
+    }
+    const svg = this._createSVG("svg:svg");
+    svg.setAttribute("version", "1.1");
+    if (!skipDimensions) {
+      svg.setAttribute("width", `${width}px`);
+      svg.setAttribute("height", `${height}px`);
+    }
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    return svg;
+  }
+  createElement(type) {
+    if (typeof type !== "string") {
+      throw new Error("Invalid SVG element type");
+    }
+    return this._createSVG(type);
+  }
+  _createSVG(type) {
+    unreachable("Abstract method `_createSVG` called.");
+  }
+}
+class DOMSVGFactory extends BaseSVGFactory {
+  _createSVG(type) {
+    return document.createElementNS(SVG_NS, type);
+  }
+}
+
+;// ./src/display/annotation_layer.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const annotation_layer_DEFAULT_FONT_SIZE = 9;
+const GetElementsByNameSet = new WeakSet();
+const TIMEZONE_OFFSET = new Date().getTimezoneOffset() * 60 * 1000;
+class AnnotationElementFactory {
+  static create(parameters) {
+    const subtype = parameters.data.annotationType;
+    switch (subtype) {
+      case AnnotationType.LINK:
+        return new LinkAnnotationElement(parameters);
+      case AnnotationType.TEXT:
+        return new TextAnnotationElement(parameters);
+      case AnnotationType.WIDGET:
+        const fieldType = parameters.data.fieldType;
+        switch (fieldType) {
+          case "Tx":
+            return new TextWidgetAnnotationElement(parameters);
+          case "Btn":
+            if (parameters.data.radioButton) {
+              return new RadioButtonWidgetAnnotationElement(parameters);
+            } else if (parameters.data.checkBox) {
+              return new CheckboxWidgetAnnotationElement(parameters);
+            }
+            return new PushButtonWidgetAnnotationElement(parameters);
+          case "Ch":
+            return new ChoiceWidgetAnnotationElement(parameters);
+          case "Sig":
+            return new SignatureWidgetAnnotationElement(parameters);
+        }
+        return new WidgetAnnotationElement(parameters);
+      case AnnotationType.POPUP:
+        return new PopupAnnotationElement(parameters);
+      case AnnotationType.FREETEXT:
+        return new FreeTextAnnotationElement(parameters);
+      case AnnotationType.LINE:
+        return new LineAnnotationElement(parameters);
+      case AnnotationType.SQUARE:
+        return new SquareAnnotationElement(parameters);
+      case AnnotationType.CIRCLE:
+        return new CircleAnnotationElement(parameters);
+      case AnnotationType.POLYLINE:
+        return new PolylineAnnotationElement(parameters);
+      case AnnotationType.CARET:
+        return new CaretAnnotationElement(parameters);
+      case AnnotationType.INK:
+        return new InkAnnotationElement(parameters);
+      case AnnotationType.POLYGON:
+        return new PolygonAnnotationElement(parameters);
+      case AnnotationType.HIGHLIGHT:
+        return new HighlightAnnotationElement(parameters);
+      case AnnotationType.UNDERLINE:
+        return new UnderlineAnnotationElement(parameters);
+      case AnnotationType.SQUIGGLY:
+        return new SquigglyAnnotationElement(parameters);
+      case AnnotationType.STRIKEOUT:
+        return new StrikeOutAnnotationElement(parameters);
+      case AnnotationType.STAMP:
+        return new StampAnnotationElement(parameters);
+      case AnnotationType.FILEATTACHMENT:
+        return new FileAttachmentAnnotationElement(parameters);
+      case AnnotationType.RICHMEDIA:
+      case AnnotationType.SCREEN:
+      case AnnotationType.SOUND:
+        return new MediaAnnotationElement(parameters);
+      default:
+        return new AnnotationElement(parameters);
+    }
+  }
+}
+class AnnotationElement {
+  #updates = null;
+  #hasBorder = false;
+  #popupElement = null;
+  constructor(parameters, {
+    isRenderable = false,
+    ignoreBorder = false,
+    createQuadrilaterals = false
+  } = {}) {
+    this.isRenderable = isRenderable;
+    this.data = parameters.data;
+    this.layer = parameters.layer;
+    this.linkService = parameters.linkService;
+    this.downloadManager = parameters.downloadManager;
+    this.imageResourcesPath = parameters.imageResourcesPath;
+    this.renderForms = parameters.renderForms;
+    this.svgFactory = parameters.svgFactory;
+    this.annotationStorage = parameters.annotationStorage;
+    this.enableComment = parameters.enableComment;
+    this.enableScripting = parameters.enableScripting;
+    this.hasJSActions = parameters.hasJSActions;
+    this._fieldObjects = parameters.fieldObjects;
+    this.parent = parameters.parent;
+    this.hasOwnCommentButton = false;
+    if (isRenderable) {
+      this.contentElement = this.container = this._createContainer(ignoreBorder);
+    }
+    if (createQuadrilaterals) {
+      this._createQuadrilaterals();
+    }
+  }
+  static _hasPopupData({
+    contentsObj,
+    richText
+  }) {
+    return !!(contentsObj?.str || richText?.str);
+  }
+  get _isEditable() {
+    return this.data.isEditable;
+  }
+  get hasPopupData() {
+    return AnnotationElement._hasPopupData(this.data) || this.enableComment && !!this.commentText;
+  }
+  get commentData() {
+    const {
+      data
+    } = this;
+    const editor = this.annotationStorage?.getEditor(data.id);
+    return editor ? editor.getData() : data;
+  }
+  get hasCommentButton() {
+    return this.enableComment && this.hasPopupElement;
+  }
+  get commentButtonPosition() {
+    const editor = this.annotationStorage?.getEditor(this.data.id);
+    if (editor) {
+      return editor.commentButtonPositionInPage;
+    }
+    const {
+      quadPoints,
+      inkLists,
+      rect
+    } = this.data;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    if (quadPoints?.length >= 8) {
+      for (let i = 0; i < quadPoints.length; i += 8) {
+        if (quadPoints[i + 1] > maxY) {
+          maxY = quadPoints[i + 1];
+          maxX = quadPoints[i + 2];
+        } else if (quadPoints[i + 1] === maxY) {
+          maxX = Math.max(maxX, quadPoints[i + 2]);
+        }
+      }
+      return [maxX, maxY];
+    }
+    if (inkLists?.length >= 1) {
+      for (const inkList of inkLists) {
+        for (let i = 0, ii = inkList.length; i < ii; i += 2) {
+          if (inkList[i + 1] > maxY) {
+            maxY = inkList[i + 1];
+            maxX = inkList[i];
+          } else if (inkList[i + 1] === maxY) {
+            maxX = Math.max(maxX, inkList[i]);
+          }
+        }
+      }
+      if (maxX !== Infinity) {
+        return [maxX, maxY];
+      }
+    }
+    return rect ? [rect[2], rect[3]] : null;
+  }
+  _normalizePoint(point) {
+    const {
+      page: {
+        view
+      },
+      viewport: {
+        rawDims: {
+          pageWidth,
+          pageHeight,
+          pageX,
+          pageY
+        }
+      }
+    } = this.parent;
+    point[1] = view[3] - point[1] + view[1];
+    point[0] = 100 * (point[0] - pageX) / pageWidth;
+    point[1] = 100 * (point[1] - pageY) / pageHeight;
+    return point;
+  }
+  get commentText() {
+    const {
+      data
+    } = this;
+    return this.annotationStorage.getRawValue(`${AnnotationEditorPrefix}${data.id}`)?.popup?.contents || data.contentsObj?.str || "";
+  }
+  set commentText(text) {
+    const {
+      data
+    } = this;
+    const popup = {
+      deleted: !text,
+      contents: text || ""
+    };
+    if (!this.annotationStorage.updateEditor(data.id, {
+      popup
+    })) {
+      this.annotationStorage.setValue(`${AnnotationEditorPrefix}${data.id}`, {
+        id: data.id,
+        annotationType: data.annotationType,
+        page: this.parent.page,
+        popup,
+        popupRef: data.popupRef,
+        modificationDate: new Date()
+      });
+    }
+    if (!text) {
+      this.removePopup();
+    }
+  }
+  removePopup() {
+    (this.#popupElement?.popup || this.popup)?.remove();
+    this.#popupElement = this.popup = null;
+  }
+  updateEdited(params) {
+    if (!this.container) {
+      return;
+    }
+    if (params.rect) {
+      this.#updates ||= {
+        rect: this.data.rect.slice(0)
+      };
+    }
+    const {
+      rect,
+      popup: newPopup
+    } = params;
+    if (rect) {
+      this.#setRectEdited(rect);
+    }
+    let popup = this.#popupElement?.popup || this.popup;
+    if (!popup && newPopup?.text) {
+      this._createPopup(newPopup);
+      popup = this.#popupElement.popup;
+    }
+    if (!popup) {
+      return;
+    }
+    popup.updateEdited(params);
+    if (newPopup?.deleted) {
+      popup.remove();
+      this.#popupElement = null;
+      this.popup = null;
+    }
+  }
+  resetEdited() {
+    if (!this.#updates) {
+      return;
+    }
+    this.#setRectEdited(this.#updates.rect);
+    this.#popupElement?.popup.resetEdited();
+    this.#updates = null;
+  }
+  #setRectEdited(rect) {
+    const {
+      container: {
+        style
+      },
+      data: {
+        rect: currentRect,
+        rotation
+      },
+      parent: {
+        viewport: {
+          rawDims: {
+            pageWidth,
+            pageHeight,
+            pageX,
+            pageY
+          }
+        }
+      }
+    } = this;
+    currentRect?.splice(0, 4, ...rect);
+    style.left = `${100 * (rect[0] - pageX) / pageWidth}%`;
+    style.top = `${100 * (pageHeight - rect[3] + pageY) / pageHeight}%`;
+    if (rotation === 0) {
+      style.width = `${100 * (rect[2] - rect[0]) / pageWidth}%`;
+      style.height = `${100 * (rect[3] - rect[1]) / pageHeight}%`;
+    } else {
+      this.setRotation(rotation);
+    }
+  }
+  _createContainer(ignoreBorder) {
+    const {
+      data,
+      parent: {
+        page,
+        viewport
+      }
+    } = this;
+    const container = document.createElement("section");
+    container.setAttribute("data-annotation-id", data.id);
+    if (!(this instanceof WidgetAnnotationElement) && !(this instanceof LinkAnnotationElement) && !(this instanceof MediaAnnotationElement)) {
+      container.tabIndex = 0;
+    }
+    const {
+      style
+    } = container;
+    style.zIndex = this.parent.zIndex;
+    this.parent.zIndex += 2;
+    if (data.alternativeText) {
+      container.title = data.alternativeText;
+    }
+    if (data.noRotate) {
+      container.classList.add("norotate");
+    }
+    if (!data.rect || this instanceof PopupAnnotationElement) {
+      const {
+        rotation
+      } = data;
+      if (!data.hasOwnCanvas && rotation !== 0) {
+        this.setRotation(rotation, container);
+      }
+      return container;
+    }
+    const {
+      width,
+      height
+    } = this;
+    if (!ignoreBorder && data.borderStyle.width > 0) {
+      style.borderWidth = `${data.borderStyle.width}px`;
+      const horizontalRadius = data.borderStyle.horizontalCornerRadius;
+      const verticalRadius = data.borderStyle.verticalCornerRadius;
+      if (horizontalRadius > 0 || verticalRadius > 0) {
+        const radius = `calc(${horizontalRadius}px * var(--total-scale-factor)) / calc(${verticalRadius}px * var(--total-scale-factor))`;
+        style.borderRadius = radius;
+      }
+      switch (data.borderStyle.style) {
+        case AnnotationBorderStyleType.SOLID:
+          style.borderStyle = "solid";
+          break;
+        case AnnotationBorderStyleType.DASHED:
+          style.borderStyle = "dashed";
+          break;
+        case AnnotationBorderStyleType.BEVELED:
+          warn("Unimplemented border style: beveled");
+          break;
+        case AnnotationBorderStyleType.INSET:
+          warn("Unimplemented border style: inset");
+          break;
+        case AnnotationBorderStyleType.UNDERLINE:
+          style.borderBottomStyle = "solid";
+          break;
+        default:
+          break;
+      }
+      const borderColor = data.borderColor || null;
+      if (borderColor) {
+        this.#hasBorder = true;
+        style.borderColor = Util.makeHexColor(...borderColor);
+      } else {
+        style.borderWidth = 0;
+      }
+    }
+    const rect = Util.normalizeRect([data.rect[0], page.view[3] - data.rect[1] + page.view[1], data.rect[2], page.view[3] - data.rect[3] + page.view[1]]);
+    const {
+      pageWidth,
+      pageHeight,
+      pageX,
+      pageY
+    } = viewport.rawDims;
+    style.left = `${100 * (rect[0] - pageX) / pageWidth}%`;
+    style.top = `${100 * (rect[1] - pageY) / pageHeight}%`;
+    const {
+      rotation
+    } = data;
+    if (data.hasOwnCanvas || rotation === 0) {
+      style.width = `${100 * width / pageWidth}%`;
+      style.height = `${100 * height / pageHeight}%`;
+    } else {
+      this.setRotation(rotation, container);
+    }
+    return container;
+  }
+  setRotation(angle, container = this.container) {
+    if (!this.data.rect) {
+      return;
+    }
+    const {
+      pageWidth,
+      pageHeight
+    } = this.parent.viewport.rawDims;
+    let {
+      width,
+      height
+    } = this;
+    if (angle % 180 !== 0) {
+      [width, height] = [height, width];
+    }
+    container.style.width = `${100 * width / pageWidth}%`;
+    container.style.height = `${100 * height / pageHeight}%`;
+    container.setAttribute("data-main-rotation", (360 - angle) % 360);
+  }
+  get _commonActions() {
+    const setColor = (jsName, styleName, event) => {
+      const color = event.detail[jsName];
+      const colorType = color[0];
+      const colorArray = color.slice(1);
+      event.target.style[styleName] = ColorConverters[`${colorType}_HTML`](colorArray);
+      this.annotationStorage.setValue(this.data.id, {
+        [styleName]: ColorConverters[`${colorType}_rgb`](colorArray)
+      });
+    };
+    return util_shadow(this, "_commonActions", {
+      display: event => {
+        const {
+          display
+        } = event.detail;
+        const hidden = display % 2 === 1;
+        this.container.style.visibility = hidden ? "hidden" : "visible";
+        this.annotationStorage.setValue(this.data.id, {
+          noView: hidden,
+          noPrint: display === 1 || display === 2
+        });
+      },
+      print: event => {
+        this.annotationStorage.setValue(this.data.id, {
+          noPrint: !event.detail.print
+        });
+      },
+      hidden: event => {
+        const {
+          hidden
+        } = event.detail;
+        this.container.style.visibility = hidden ? "hidden" : "visible";
+        this.annotationStorage.setValue(this.data.id, {
+          noPrint: hidden,
+          noView: hidden
+        });
+      },
+      focus: event => {
+        setTimeout(() => event.target.focus({
+          preventScroll: false
+        }), 0);
+      },
+      userName: event => {
+        event.target.title = event.detail.userName;
+      },
+      readonly: event => {
+        event.target.disabled = event.detail.readonly;
+      },
+      required: event => {
+        this._setRequired(event.target, event.detail.required);
+      },
+      bgColor: event => {
+        setColor("bgColor", "backgroundColor", event);
+      },
+      fillColor: event => {
+        setColor("fillColor", "backgroundColor", event);
+      },
+      fgColor: event => {
+        setColor("fgColor", "color", event);
+      },
+      textColor: event => {
+        setColor("textColor", "color", event);
+      },
+      borderColor: event => {
+        setColor("borderColor", "borderColor", event);
+      },
+      strokeColor: event => {
+        setColor("strokeColor", "borderColor", event);
+      },
+      rotation: event => {
+        const angle = event.detail.rotation;
+        this.setRotation(angle);
+        this.annotationStorage.setValue(this.data.id, {
+          rotation: angle
+        });
+      }
+    });
+  }
+  _dispatchEventFromSandbox(actions, jsEvent) {
+    const commonActions = this._commonActions;
+    for (const name of Object.keys(jsEvent.detail)) {
+      const action = actions[name] || commonActions[name];
+      action?.(jsEvent);
+    }
+  }
+  _setDefaultPropertiesFromJS(element) {
+    if (!this.enableScripting) {
+      return;
+    }
+    const storedData = this.annotationStorage.getRawValue(this.data.id);
+    if (!storedData) {
+      return;
+    }
+    const commonActions = this._commonActions;
+    for (const [actionName, detail] of Object.entries(storedData)) {
+      const action = commonActions[actionName];
+      if (action) {
+        const eventProxy = {
+          detail: {
+            [actionName]: detail
+          },
+          target: element
+        };
+        action(eventProxy);
+        delete storedData[actionName];
+      }
+    }
+  }
+  _createQuadrilaterals() {
+    if (!this.container) {
+      return;
+    }
+    const {
+      quadPoints
+    } = this.data;
+    if (!quadPoints) {
+      return;
+    }
+    const [rectBlX, rectBlY, rectTrX, rectTrY] = this.data.rect.map(Math.fround);
+    if (quadPoints.length === 8) {
+      const [trX, trY, blX, blY] = quadPoints.subarray(2, 6);
+      if (rectTrX === trX && rectTrY === trY && rectBlX === blX && rectBlY === blY) {
+        return;
+      }
+    }
+    const {
+      style
+    } = this.container;
+    let svgBuffer;
+    if (this.#hasBorder) {
+      const {
+        borderColor,
+        borderWidth
+      } = style;
+      style.borderWidth = 0;
+      svgBuffer = ["url('data:image/svg+xml;utf8,", `<svg xmlns="${SVG_NS}" preserveAspectRatio="none" viewBox="0 0 1 1">`, `<g fill="transparent" stroke="${borderColor}" stroke-width="${borderWidth}">`];
+      this.container.classList.add("hasBorder");
+    }
+    const width = rectTrX - rectBlX;
+    const height = rectTrY - rectBlY;
+    const {
+      svgFactory
+    } = this;
+    const svg = svgFactory.createElement("svg");
+    svg.classList.add("quadrilateralsContainer");
+    svg.setAttribute("width", 0);
+    svg.setAttribute("height", 0);
+    svg.role = "none";
+    const defs = svgFactory.createElement("defs");
+    svg.append(defs);
+    const clipPath = svgFactory.createElement("clipPath");
+    const id = `clippath_${this.data.id}`;
+    clipPath.setAttribute("id", id);
+    clipPath.setAttribute("clipPathUnits", "objectBoundingBox");
+    defs.append(clipPath);
+    for (let i = 2, ii = quadPoints.length; i < ii; i += 8) {
+      const trX = quadPoints[i];
+      const trY = quadPoints[i + 1];
+      const blX = quadPoints[i + 2];
+      const blY = quadPoints[i + 3];
+      const rect = svgFactory.createElement("rect");
+      const x = (blX - rectBlX) / width;
+      const y = (rectTrY - trY) / height;
+      const rectWidth = (trX - blX) / width;
+      const rectHeight = (trY - blY) / height;
+      rect.setAttribute("x", x);
+      rect.setAttribute("y", y);
+      rect.setAttribute("width", rectWidth);
+      rect.setAttribute("height", rectHeight);
+      clipPath.append(rect);
+      svgBuffer?.push(`<rect vector-effect="non-scaling-stroke" x="${x}" y="${y}" width="${rectWidth}" height="${rectHeight}"/>`);
+    }
+    if (this.#hasBorder) {
+      svgBuffer.push(`</g></svg>')`);
+      style.backgroundImage = svgBuffer.join("");
+    }
+    this.container.append(svg);
+    this.container.style.clipPath = `url(#${id})`;
+  }
+  _createPopup(popupData = null) {
+    const {
+      data
+    } = this;
+    let contentsObj, modificationDate;
+    if (popupData) {
+      contentsObj = {
+        str: popupData.text
+      };
+      modificationDate = popupData.date;
+    } else {
+      contentsObj = data.contentsObj;
+      modificationDate = data.modificationDate;
+    }
+    this.#popupElement = new PopupAnnotationElement({
+      data: {
+        color: data.color,
+        titleObj: data.titleObj,
+        modificationDate,
+        contentsObj,
+        richText: data.richText,
+        parentRect: data.rect,
+        borderStyle: 0,
+        id: `popup_${data.id}`,
+        rotation: data.rotation,
+        noRotate: true
+      },
+      linkService: this.linkService,
+      parent: this.parent,
+      elements: [this]
+    });
+  }
+  get hasPopupElement() {
+    return !!(this.#popupElement || this.popup || this.data.popupRef);
+  }
+  get extraPopupElement() {
+    return this.#popupElement;
+  }
+  render() {
+    unreachable("Abstract method `AnnotationElement.render` called");
+  }
+  _getElementsByName(name, skipId = null) {
+    const fields = [];
+    if (this._fieldObjects) {
+      const fieldObj = this._fieldObjects.get(name) || [];
+      for (const {
+        page,
+        id,
+        exportValues
+      } of fieldObj) {
+        if (page === -1 || id === skipId) {
+          continue;
+        }
+        const exportValue = typeof exportValues === "string" ? exportValues : null;
+        const domElement = document.querySelector(`[data-element-id="${id}"]`);
+        if (domElement && !GetElementsByNameSet.has(domElement)) {
+          warn(`_getElementsByName - element not allowed: ${id}`);
+          continue;
+        }
+        fields.push({
+          id,
+          exportValue,
+          domElement
+        });
+      }
+      return fields;
+    }
+    for (const domElement of document.getElementsByName(name)) {
+      const {
+        exportValue
+      } = domElement;
+      const id = domElement.getAttribute("data-element-id");
+      if (id === skipId || !GetElementsByNameSet.has(domElement)) {
+        continue;
+      }
+      fields.push({
+        id,
+        exportValue,
+        domElement
+      });
+    }
+    return fields;
+  }
+  show() {
+    if (this.container) {
+      this.container.hidden = false;
+    }
+    this.popup?.maybeShow();
+  }

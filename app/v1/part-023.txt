@@ -1,0 +1,1000 @@
+
+
+
+
+
+function getNetworkStream(url) {
+  return isValidFetchUrl(url) ? PDFFetchStream : isNodeJS ? PDFNodeStream : PDFNetworkStream;
+}
+
+;// ./src/display/worker_options.js
+class GlobalWorkerOptions {
+  static #port = null;
+  static #src = "";
+  static get workerPort() {
+    return this.#port;
+  }
+  static set workerPort(val) {
+    if (!(typeof Worker !== "undefined" && val instanceof Worker) && val !== null) {
+      throw new Error("Invalid `workerPort` type.");
+    }
+    this.#port = val;
+  }
+  static get workerSrc() {
+    return this.#src;
+  }
+  static set workerSrc(val) {
+    if (typeof val !== "string") {
+      throw new Error("Invalid `workerSrc` type.");
+    }
+    this.#src = val;
+  }
+}
+
+;// ./src/display/metadata.js
+class Metadata {
+  #map;
+  #data;
+  constructor({
+    parsedData,
+    rawData
+  }) {
+    this.#map = parsedData;
+    this.#data = rawData;
+  }
+  getRaw() {
+    return this.#data;
+  }
+  get(name) {
+    return this.#map.get(name) ?? null;
+  }
+  [Symbol.iterator]() {
+    return this.#map.entries();
+  }
+}
+
+;// ./src/display/optional_content_config.js
+
+
+
+
+const INTERNAL = Symbol("INTERNAL");
+class OptionalContentGroup {
+  #isDisplay = false;
+  #isPrint = false;
+  #userSet = false;
+  #visible = true;
+  constructor(renderingIntent, {
+    name,
+    intent,
+    usage,
+    rbGroups
+  }) {
+    this.#isDisplay = !!(renderingIntent & RenderingIntentFlag.DISPLAY);
+    this.#isPrint = !!(renderingIntent & RenderingIntentFlag.PRINT);
+    this.name = name;
+    this.intent = intent;
+    this.usage = usage;
+    this.rbGroups = rbGroups;
+  }
+  get visible() {
+    if (this.#userSet) {
+      return this.#visible;
+    }
+    if (!this.#visible) {
+      return false;
+    }
+    const {
+      print,
+      view
+    } = this.usage;
+    if (this.#isDisplay) {
+      return view?.viewState !== "OFF";
+    } else if (this.#isPrint) {
+      return print?.printState !== "OFF";
+    }
+    return true;
+  }
+  _setVisible(internal, visible, userSet = false) {
+    if (internal !== INTERNAL) {
+      unreachable("Internal method `_setVisible` called.");
+    }
+    this.#userSet = userSet;
+    this.#visible = visible;
+  }
+  get serializable() {
+    return {
+      userSet: this.#userSet,
+      visible: this.#visible
+    };
+  }
+}
+class OptionalContentConfig {
+  #cachedGetHash = null;
+  #groups = new Map();
+  #initialHash = null;
+  #order = null;
+  #rawData;
+  creator = null;
+  name = null;
+  constructor(data, renderingIntent = RenderingIntentFlag.DISPLAY, groupState = null) {
+    this.#rawData = data;
+    this.renderingIntent = renderingIntent;
+    if (data === null) {
+      return;
+    }
+    this.name = data.name;
+    this.creator = data.creator;
+    this.#order = data.order;
+    for (const group of data.groups) {
+      this.#groups.set(group.id, new OptionalContentGroup(renderingIntent, group));
+    }
+    if (groupState) {
+      if (groupState.size !== this.#groups.size) {
+        unreachable("Incorrect serialized groupState.");
+      }
+      for (const [id, group] of groupState) {
+        this.#groups.get(id)._setVisible(INTERNAL, group.visible, group.userSet);
+      }
+    } else {
+      if (data.baseState === "OFF") {
+        for (const group of this.#groups.values()) {
+          group._setVisible(INTERNAL, false);
+        }
+      }
+      for (const on of data.on) {
+        this.#groups.get(on)._setVisible(INTERNAL, true);
+      }
+      for (const off of data.off) {
+        this.#groups.get(off)._setVisible(INTERNAL, false);
+      }
+    }
+    this.#initialHash = this.getHash();
+  }
+  #evaluateVisibilityExpression(array) {
+    const length = array.length;
+    if (length < 2) {
+      return true;
+    }
+    const operator = array[0];
+    for (let i = 1; i < length; i++) {
+      const element = array[i];
+      let state;
+      if (Array.isArray(element)) {
+        state = this.#evaluateVisibilityExpression(element);
+      } else if (this.#groups.has(element)) {
+        state = this.#groups.get(element).visible;
+      } else {
+        warn(`Optional content group not found: ${element}`);
+        return true;
+      }
+      switch (operator) {
+        case "And":
+          if (!state) {
+            return false;
+          }
+          break;
+        case "Or":
+          if (state) {
+            return true;
+          }
+          break;
+        case "Not":
+          return !state;
+        default:
+          return true;
+      }
+    }
+    return operator === "And";
+  }
+  isVisible(group) {
+    if (this.#groups.size === 0) {
+      return true;
+    }
+    if (!group) {
+      info("Optional content group not defined.");
+      return true;
+    }
+    if (group.type === "OCG") {
+      if (!this.#groups.has(group.id)) {
+        warn(`Optional content group not found: ${group.id}`);
+        return true;
+      }
+      return this.#groups.get(group.id).visible;
+    } else if (group.type === "OCMD") {
+      if (group.expression) {
+        return this.#evaluateVisibilityExpression(group.expression);
+      }
+      if (!group.policy || group.policy === "AnyOn") {
+        for (const id of group.ids) {
+          if (!this.#groups.has(id)) {
+            warn(`Optional content group not found: ${id}`);
+            return true;
+          }
+          if (this.#groups.get(id).visible) {
+            return true;
+          }
+        }
+        return false;
+      } else if (group.policy === "AllOn") {
+        for (const id of group.ids) {
+          if (!this.#groups.has(id)) {
+            warn(`Optional content group not found: ${id}`);
+            return true;
+          }
+          if (!this.#groups.get(id).visible) {
+            return false;
+          }
+        }
+        return true;
+      } else if (group.policy === "AnyOff") {
+        for (const id of group.ids) {
+          if (!this.#groups.has(id)) {
+            warn(`Optional content group not found: ${id}`);
+            return true;
+          }
+          if (!this.#groups.get(id).visible) {
+            return true;
+          }
+        }
+        return false;
+      } else if (group.policy === "AllOff") {
+        for (const id of group.ids) {
+          if (!this.#groups.has(id)) {
+            warn(`Optional content group not found: ${id}`);
+            return true;
+          }
+          if (this.#groups.get(id).visible) {
+            return false;
+          }
+        }
+        return true;
+      }
+      warn(`Unknown optional content policy ${group.policy}.`);
+      return true;
+    }
+    warn(`Unknown group type ${group.type}.`);
+    return true;
+  }
+  setVisibility(id, visible = true, preserveRB = true) {
+    const group = this.#groups.get(id);
+    if (!group) {
+      warn(`Optional content group not found: ${id}`);
+      return;
+    }
+    if (preserveRB && visible && group.rbGroups.length) {
+      for (const rbGroup of group.rbGroups) {
+        for (const otherId of rbGroup) {
+          if (otherId !== id) {
+            this.#groups.get(otherId)?._setVisible(INTERNAL, false, true);
+          }
+        }
+      }
+    }
+    group._setVisible(INTERNAL, !!visible, true);
+    this.#cachedGetHash = null;
+  }
+  setOCGState({
+    state,
+    preserveRB
+  }) {
+    let operator;
+    for (const elem of state) {
+      switch (elem) {
+        case "ON":
+        case "OFF":
+        case "Toggle":
+          operator = elem;
+          continue;
+      }
+      const group = this.#groups.get(elem);
+      if (!group) {
+        continue;
+      }
+      switch (operator) {
+        case "ON":
+          this.setVisibility(elem, true, preserveRB);
+          break;
+        case "OFF":
+          this.setVisibility(elem, false, preserveRB);
+          break;
+        case "Toggle":
+          this.setVisibility(elem, !group.visible, preserveRB);
+          break;
+      }
+    }
+    this.#cachedGetHash = null;
+  }
+  get hasInitialVisibility() {
+    return this.#initialHash === null || this.getHash() === this.#initialHash;
+  }
+  getOrder() {
+    if (!this.#groups.size) {
+      return null;
+    }
+    return this.#order ? this.#order.slice() : [...this.#groups.keys()];
+  }
+  getGroup(id) {
+    return this.#groups.get(id) || null;
+  }
+  getHash() {
+    if (this.#cachedGetHash !== null) {
+      return this.#cachedGetHash;
+    }
+    const hash = new MurmurHash3_64();
+    for (const [id, group] of this.#groups) {
+      hash.update(`${id}:${group.visible}`);
+    }
+    return this.#cachedGetHash = hash.hexdigest();
+  }
+  [Symbol.iterator]() {
+    return this.#groups.entries();
+  }
+  get serializable() {
+    const groupState = new Map();
+    for (const [id, group] of this.#groups) {
+      groupState.set(id, group.serializable);
+    }
+    return {
+      data: this.#rawData,
+      renderingIntent: this.renderingIntent,
+      groupState
+    };
+  }
+  static fromSerializable({
+    data,
+    renderingIntent,
+    groupState
+  }) {
+    return new OptionalContentConfig(data, renderingIntent, groupState);
+  }
+}
+
+;// ./src/display/pages_mapper.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class PagesMapper {
+  #pageNumberToId = null;
+  #prevPageNumbers = null;
+  #pagesNumber = 0;
+  #clipboard = null;
+  #savedData = null;
+  get pagesNumber() {
+    return this.#pagesNumber;
+  }
+  set pagesNumber(n) {
+    if (this.#pagesNumber === n) {
+      return;
+    }
+    this.#pagesNumber = n;
+    this.#pageNumberToId = null;
+    this.#prevPageNumbers = null;
+  }
+  #ensureInit() {
+    if (this.#pageNumberToId) {
+      return;
+    }
+    const n = this.#pagesNumber;
+    const pageNumberToId = this.#pageNumberToId = new Uint32Array(n);
+    for (let i = 0; i < n; i++) {
+      pageNumberToId[i] = i + 1;
+    }
+    this.#prevPageNumbers = new Int32Array(pageNumberToId);
+  }
+  #buildIdToPageNumber() {
+    const idToPageNumber = new Map();
+    const pageNumberToId = this.#pageNumberToId;
+    for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
+      const id = pageNumberToId[i];
+      const pageNumbers = idToPageNumber.get(id);
+      if (pageNumbers) {
+        pageNumbers.push(i + 1);
+      } else {
+        idToPageNumber.set(id, [i + 1]);
+      }
+    }
+    return idToPageNumber;
+  }
+  movePages(selectedPages, pagesToMove, index) {
+    this.#ensureInit();
+    const pageNumberToId = this.#pageNumberToId;
+    const movedCount = pagesToMove.length;
+    const mappedPagesToMove = new Uint32Array(movedCount);
+    let removedBeforeTarget = 0;
+    for (let i = 0; i < movedCount; i++) {
+      const pageIndex = pagesToMove[i] - 1;
+      mappedPagesToMove[i] = pageNumberToId[pageIndex];
+      if (pageIndex < index) {
+        removedBeforeTarget++;
+      }
+    }
+    const pagesNumber = this.#pagesNumber;
+    const remainingLen = pagesNumber - movedCount;
+    const prevPageNumbers = new Int32Array(pagesNumber);
+    const adjustedTarget = MathClamp(index - removedBeforeTarget, 0, remainingLen);
+    for (let i = 0, r = 0; i < pagesNumber; i++) {
+      if (!selectedPages.has(i + 1)) {
+        pageNumberToId[r] = pageNumberToId[i];
+        prevPageNumbers[r++] = i + 1;
+      }
+    }
+    pageNumberToId.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
+    pageNumberToId.set(mappedPagesToMove, adjustedTarget);
+    prevPageNumbers.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
+    prevPageNumbers.set(pagesToMove, adjustedTarget);
+    this.#prevPageNumbers = prevPageNumbers;
+    if (pageNumberToId.every((id, i) => id === i + 1)) {
+      this.#pageNumberToId = null;
+    }
+  }
+  deletePages(pagesToDelete) {
+    this.#ensureInit();
+    const pageNumberToId = this.#pageNumberToId;
+    const prevIdToPageNumber = this.#buildIdToPageNumber();
+    this.#savedData = {
+      pageNumberToId: pageNumberToId.slice(),
+      pagesNumber: this.#pagesNumber,
+      prevPageNumbers: this.#prevPageNumbers.slice()
+    };
+    const newN = this.#pagesNumber - pagesToDelete.length;
+    this.#pagesNumber = newN;
+    const newPageNumberToId = this.#pageNumberToId = new Uint32Array(newN);
+    this.#prevPageNumbers = new Int32Array(newN);
+    let sourceIndex = 0;
+    let destIndex = 0;
+    for (const pageNumber of pagesToDelete) {
+      const pageIndex = pageNumber - 1;
+      if (pageIndex !== sourceIndex) {
+        newPageNumberToId.set(pageNumberToId.subarray(sourceIndex, pageIndex), destIndex);
+        destIndex += pageIndex - sourceIndex;
+      }
+      sourceIndex = pageIndex + 1;
+    }
+    if (sourceIndex < pageNumberToId.length) {
+      newPageNumberToId.set(pageNumberToId.subarray(sourceIndex), destIndex);
+    }
+    this.#updatePrevPageNumbers(prevIdToPageNumber, new Set(pagesToDelete));
+  }
+  cancelDelete() {
+    if (this.#savedData) {
+      this.#pageNumberToId = this.#savedData.pageNumberToId;
+      this.#pagesNumber = this.#savedData.pagesNumber;
+      this.#prevPageNumbers = this.#savedData.prevPageNumbers;
+      this.#savedData = null;
+    }
+  }
+  cleanSavedData() {
+    this.#savedData = null;
+  }
+  copyPages(pagesToCopy) {
+    this.#ensureInit();
+    this.#clipboard = {
+      pageNumbers: pagesToCopy,
+      pageIds: pagesToCopy.map(n => this.#pageNumberToId[n - 1])
+    };
+  }
+  cancelCopy() {
+    this.#clipboard = null;
+  }
+  pastePages(index) {
+    this.#ensureInit();
+    const pageNumberToId = this.#pageNumberToId;
+    const prevIdToPageNumber = this.#buildIdToPageNumber();
+    const {
+      pageNumbers: copiedPageNumbers,
+      pageIds: copiedPageIds
+    } = this.#clipboard;
+    const newN = this.#pagesNumber + copiedPageNumbers.length;
+    this.#pagesNumber = newN;
+    const newPageNumberToId = this.#pageNumberToId = new Uint32Array(newN);
+    this.#prevPageNumbers = new Int32Array(newN);
+    newPageNumberToId.set(pageNumberToId.subarray(0, index), 0);
+    newPageNumberToId.set(copiedPageIds, index);
+    newPageNumberToId.set(pageNumberToId.subarray(index), index + copiedPageNumbers.length);
+    this.#updatePrevPageNumbers(prevIdToPageNumber, null, index, copiedPageNumbers);
+    this.#clipboard = null;
+  }
+  #updatePrevPageNumbers(prevIdToPageNumber, deletedPageNumbers = null, pasteIndex = -1, copiedPageNumbers = null) {
+    const prevPageNumbers = this.#prevPageNumbers;
+    const newPageNumberToId = this.#pageNumberToId;
+    const pasteEnd = pasteIndex + (copiedPageNumbers?.length ?? 0);
+    const idsIndices = new Map();
+    for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
+      if (i >= pasteIndex && i < pasteEnd) {
+        prevPageNumbers[i] = -copiedPageNumbers[i - pasteIndex];
+        continue;
+      }
+      const id = newPageNumberToId[i];
+      const oldPositions = prevIdToPageNumber.get(id);
+      let j = idsIndices.get(id) || 0;
+      if (deletedPageNumbers && oldPositions) {
+        while (j < oldPositions.length && deletedPageNumbers.has(oldPositions[j])) {
+          j++;
+        }
+      }
+      prevPageNumbers[i] = oldPositions?.[j];
+      idsIndices.set(id, j + 1);
+    }
+  }
+  hasBeenAltered() {
+    return this.#pageNumberToId !== null;
+  }
+  #buildCopyLevels(extractedPageNumbers = null) {
+    if (!this.#pageNumberToId) {
+      return null;
+    }
+    const copyLevels = new Int32Array(this.#pagesNumber).fill(-1);
+    const counts = new Map();
+    if (extractedPageNumbers) {
+      for (const pageNumber of extractedPageNumbers) {
+        const id = this.getPageId(pageNumber);
+        const level = counts.get(id) ?? 0;
+        counts.set(id, level + 1);
+        copyLevels[pageNumber - 1] = level;
+      }
+    } else {
+      for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
+        const id = this.#pageNumberToId[i];
+        const level = counts.get(id) ?? 0;
+        counts.set(id, level + 1);
+        copyLevels[i] = level;
+      }
+    }
+    return copyLevels;
+  }
+  getPageMappingForSaving(idToPageNumber = null, copyLevels = this.#buildCopyLevels()) {
+    idToPageNumber ??= this.#buildIdToPageNumber();
+    let nCopy = 0;
+    for (const pageNumbers of idToPageNumber.values()) {
+      nCopy = Math.max(nCopy, pageNumbers.length);
+    }
+    const extractParams = new Array(nCopy);
+    for (let i = 0; i < nCopy; i++) {
+      extractParams[i] = {
+        document: null,
+        pageIndices: [],
+        includePages: []
+      };
+    }
+    for (const [id, pageNumbers] of idToPageNumber) {
+      for (let i = 0, ii = pageNumbers.length; i < ii; i++) {
+        extractParams[i].includePages.push([id - 1, pageNumbers[i] - 1]);
+      }
+    }
+    for (const {
+      includePages,
+      pageIndices
+    } of extractParams) {
+      includePages.sort((a, b) => a[0] - b[0]);
+      for (let i = 0, ii = includePages.length; i < ii; i++) {
+        pageIndices.push(includePages[i][1]);
+        includePages[i] = includePages[i][0];
+      }
+    }
+    return {
+      pageInfos: extractParams,
+      copyLevels
+    };
+  }
+  extractPages(extractedPageNumbers) {
+    extractedPageNumbers = Array.from(extractedPageNumbers).sort((a, b) => a - b);
+    const usedIds = new Map();
+    for (let i = 0, ii = extractedPageNumbers.length; i < ii; i++) {
+      const id = this.getPageId(extractedPageNumbers[i]);
+      const usedPageNumbers = usedIds.getOrInsertComputed(id, makeArr);
+      usedPageNumbers.push(i + 1);
+    }
+    return this.getPageMappingForSaving(usedIds, this.#buildCopyLevels(extractedPageNumbers));
+  }
+  getPrevPageNumber(pageNumber) {
+    return this.#prevPageNumbers?.[pageNumber - 1] ?? 0;
+  }
+  getPageNumber(id) {
+    if (!this.#pageNumberToId) {
+      return id;
+    }
+    const pageNumberToId = this.#pageNumberToId;
+    for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
+      if (pageNumberToId[i] === id) {
+        return i + 1;
+      }
+    }
+    return 0;
+  }
+  getPageId(pageNumber) {
+    return this.#pageNumberToId?.[pageNumber - 1] ?? pageNumber;
+  }
+  getMapping() {
+    return this.#pageNumberToId?.subarray(0, this.pagesNumber);
+  }
+}
+
+;// ./src/display/pdf_objects.js
+
+
+const INITIAL_DATA = Symbol("INITIAL_DATA");
+const dataObj = () => ({
+  ...Promise.withResolvers(),
+  data: INITIAL_DATA
+});
+class PDFObjects {
+  #objs = new Map();
+  get(objId, callback = null) {
+    if (callback) {
+      const obj = this.#objs.getOrInsertComputed(objId, dataObj);
+      obj.promise.then(() => callback(obj.data));
+      return null;
+    }
+    const obj = this.#objs.get(objId);
+    if (!obj || obj.data === INITIAL_DATA) {
+      throw new Error(`Requesting object that isn't resolved yet ${objId}.`);
+    }
+    return obj.data;
+  }
+  has(objId) {
+    const obj = this.#objs.get(objId);
+    return !!obj && obj.data !== INITIAL_DATA;
+  }
+  delete(objId) {
+    const obj = this.#objs.get(objId);
+    if (!obj || obj.data === INITIAL_DATA) {
+      return false;
+    }
+    this.#objs.delete(objId);
+    return true;
+  }
+  resolve(objId, data = null) {
+    const obj = this.#objs.getOrInsertComputed(objId, dataObj);
+    if (obj.data !== INITIAL_DATA) {
+      throw new Error(`Object already resolved ${objId}.`);
+    }
+    obj.data = data;
+    obj.resolve();
+  }
+  clear() {
+    for (const {
+      data
+    } of this.#objs.values()) {
+      data?.bitmap?.close();
+    }
+    this.#objs.clear();
+  }
+  *[Symbol.iterator]() {
+    for (const [objId, {
+      data
+    }] of this.#objs) {
+      if (data !== INITIAL_DATA) {
+        yield [objId, data];
+      }
+    }
+  }
+}
+
+;// ./src/display/text_layer.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const MAX_TEXT_DIVS_TO_RENDER = 100000;
+const DEFAULT_FONT_SIZE = 30;
+class TextLayer {
+  #capability = Promise.withResolvers();
+  #container = null;
+  #disableProcessItems = false;
+  #fontInspectorEnabled = !!globalThis.FontInspector?.enabled;
+  #imagesHandler = null;
+  #lang = null;
+  #layoutTextParams = null;
+  #pageHeight = 0;
+  #pageWidth = 0;
+  #pixelRatio = OutputScale.pixelRatio;
+  #reader = null;
+  #rootContainer = null;
+  #rotation = 0;
+  #scale = 0;
+  #styleCache = Object.create(null);
+  #textContentItemsStr = [];
+  #textContentSource = null;
+  #textDivs = [];
+  #textDivProperties = new WeakMap();
+  #transform = null;
+  static #ascentCache = new Map();
+  static #canvasContexts = new Map();
+  static #canvasCtxFonts = new WeakMap();
+  static #minFontSize = null;
+  static #pendingTextLayers = new Set();
+  constructor({
+    textContentSource,
+    images,
+    container,
+    viewport
+  }) {
+    if (textContentSource instanceof ReadableStream) {
+      this.#textContentSource = textContentSource;
+    } else if (typeof textContentSource === "object") {
+      this.#textContentSource = new ReadableStream({
+        start(controller) {
+          controller.enqueue(textContentSource);
+          controller.close();
+        }
+      });
+    } else {
+      throw new Error('No "textContentSource" parameter specified.');
+    }
+    this.#container = this.#rootContainer = container;
+    this.#imagesHandler = images;
+    this.#scale = viewport.scale * this.#pixelRatio;
+    this.#rotation = viewport.rotation;
+    this.#layoutTextParams = {
+      div: null,
+      properties: null,
+      ctx: null
+    };
+    const {
+      pageWidth,
+      pageHeight,
+      pageX,
+      pageY
+    } = viewport.rawDims;
+    this.#transform = [1, 0, 0, -1, -pageX, pageY + pageHeight];
+    this.#pageWidth = pageWidth;
+    this.#pageHeight = pageHeight;
+    TextLayer.#ensureMinFontSizeComputed();
+    container.style.setProperty("--min-font-size", TextLayer.#minFontSize);
+    setLayerDimensions(container, viewport);
+    this.#capability.promise.finally(() => {
+      TextLayer.#pendingTextLayers.delete(this);
+      this.#layoutTextParams = null;
+      this.#styleCache = null;
+    }).catch(() => {});
+  }
+  static get fontFamilyMap() {
+    const {
+      isWindows,
+      isFirefox
+    } = FeatureTest.platform;
+    return util_shadow(this, "fontFamilyMap", new Map([["sans-serif", `${isWindows && isFirefox ? "Calibri, " : ""}sans-serif`], ["monospace", `${isWindows && isFirefox ? "Lucida Console, " : ""}monospace`]]));
+  }
+  render() {
+    if (this.#imagesHandler) {
+      this.#container.append(this.#imagesHandler.render());
+    }
+    const pump = () => {
+      this.#reader.read().then(({
+        value,
+        done
+      }) => {
+        if (done) {
+          this.#capability.resolve();
+          return;
+        }
+        this.#lang ??= value.lang;
+        Object.assign(this.#styleCache, value.styles);
+        this.#processItems(value.items);
+        pump();
+      }, this.#capability.reject);
+    };
+    this.#reader = this.#textContentSource.getReader();
+    TextLayer.#pendingTextLayers.add(this);
+    pump();
+    return this.#capability.promise;
+  }
+  update({
+    viewport,
+    onBefore = null
+  }) {
+    const scale = viewport.scale * OutputScale.pixelRatio;
+    const rotation = viewport.rotation;
+    if (rotation !== this.#rotation) {
+      onBefore?.();
+      this.#rotation = rotation;
+      setLayerDimensions(this.#rootContainer, {
+        rotation
+      });
+    }
+    if (scale !== this.#scale) {
+      onBefore?.();
+      this.#scale = scale;
+      this.#pixelRatio = OutputScale.pixelRatio;
+      const params = {
+        div: null,
+        properties: null,
+        ctx: TextLayer.#getCtx(this.#lang)
+      };
+      for (const div of this.#textDivs) {
+        params.properties = this.#textDivProperties.get(div);
+        params.div = div;
+        this.#layout(params);
+      }
+    }
+  }
+  cancel() {
+    const abortEx = new AbortException("TextLayer task cancelled.");
+    this.#reader?.cancel(abortEx).catch(() => {});
+    this.#reader = null;
+    this.#capability.reject(abortEx);
+  }
+  get textDivs() {
+    return this.#textDivs;
+  }
+  get textContentItemsStr() {
+    return this.#textContentItemsStr;
+  }
+  #processItems(items) {
+    if (this.#disableProcessItems) {
+      return;
+    }
+    this.#layoutTextParams.ctx ??= TextLayer.#getCtx(this.#lang);
+    const textDivs = this.#textDivs,
+      textContentItemsStr = this.#textContentItemsStr;
+    for (const item of items) {
+      if (textDivs.length > MAX_TEXT_DIVS_TO_RENDER) {
+        warn("Ignoring additional textDivs for performance reasons.");
+        this.#disableProcessItems = true;
+        return;
+      }
+      if (item.str === undefined) {
+        if (item.type === "beginMarkedContentProps" || item.type === "beginMarkedContent") {
+          const parent = this.#container;
+          this.#container = document.createElement("span");
+          this.#container.classList.add("markedContent");
+          if (item.id) {
+            this.#container.setAttribute("id", item.id);
+          }
+          if (item.tag === "Artifact") {
+            this.#container.ariaHidden = true;
+          }
+          parent.append(this.#container);
+        } else if (item.type === "endMarkedContent") {
+          this.#container = this.#container.parentNode;
+        }
+        continue;
+      }
+      textContentItemsStr.push(item.str);
+      this.#appendText(item);
+    }
+  }
+  #appendText(geom) {
+    const textDiv = document.createElement("span");
+    const textDivProperties = {
+      angle: 0,
+      canvasWidth: 0,
+      hasText: geom.str !== "",
+      hasEOL: geom.hasEOL,
+      fontSize: 0
+    };
+    this.#textDivs.push(textDiv);
+    const tx = Util.transform(this.#transform, geom.transform);
+    let angle = Math.atan2(tx[1], tx[0]);
+    const style = this.#styleCache[geom.fontName];
+    if (style.vertical) {
+      angle += Math.PI / 2;
+    }
+    let fontFamily = this.#fontInspectorEnabled && style.fontSubstitution || style.fontFamily;
+    fontFamily = TextLayer.fontFamilyMap.get(fontFamily) || fontFamily;
+    const fontHeight = Math.hypot(tx[2], tx[3]);
+    const fontAscent = fontHeight * TextLayer.#getAscent(fontFamily, style, this.#lang);
+    let left, top;
+    if (angle === 0) {
+      left = tx[4];
+      top = tx[5] - fontAscent;
+    } else {
+      left = tx[4] + fontAscent * Math.sin(angle);
+      top = tx[5] - fontAscent * Math.cos(angle);
+    }
+    const divStyle = textDiv.style;
+    divStyle.left = `${(100 * left / this.#pageWidth).toFixed(2)}%`;
+    divStyle.top = `${(100 * top / this.#pageHeight).toFixed(2)}%`;
+    const roundedFontHeight = Math.round(fontHeight * 100) / 100;
+    divStyle.setProperty("--font-height", `${roundedFontHeight}px`);
+    divStyle.fontFamily = fontFamily;
+    textDivProperties.fontSize = roundedFontHeight;
+    textDiv.setAttribute("role", "presentation");
+    textDiv.textContent = geom.str;
+    textDiv.dir = geom.dir;
+    if (this.#fontInspectorEnabled) {
+      textDiv.dataset.fontName = style.fontSubstitutionLoadedName || geom.fontName;
+    }
+    if (angle !== 0) {
+      textDivProperties.angle = angle * (180 / Math.PI);
+    }
+    let shouldScaleText = false;
+    if (geom.str.length > 1) {
+      shouldScaleText = true;
+    } else if (geom.str !== " " && geom.transform[0] !== geom.transform[3]) {
+      const absScaleX = Math.abs(geom.transform[0]),
+        absScaleY = Math.abs(geom.transform[3]);
+      if (absScaleX !== absScaleY && Math.max(absScaleX, absScaleY) / Math.min(absScaleX, absScaleY) > 1.5) {
+        shouldScaleText = true;
+      }
+    }
+    if (shouldScaleText) {
+      textDivProperties.canvasWidth = style.vertical ? geom.height : geom.width;
+    }
+    this.#textDivProperties.set(textDiv, textDivProperties);
+    this.#layoutTextParams.div = textDiv;
+    this.#layoutTextParams.properties = textDivProperties;
+    this.#layout(this.#layoutTextParams);
+    if (textDivProperties.hasText) {
+      this.#container.append(textDiv);
+    }
+    if (textDivProperties.hasEOL) {
+      const br = document.createElement("br");
+      br.setAttribute("role", "presentation");
+      this.#container.append(br);
+    }
+  }
+  #layout(params) {
+    const {
+      div,
+      properties,
+      ctx
+    } = params;
+    const {
+      style
+    } = div;
+    const {
+      canvasWidth,
+      fontSize
+    } = properties;
+    if (canvasWidth !== 0 && fontSize !== 0 && properties.hasText) {
+      const {
+        fontFamily
+      } = style;
+      const pixelRatio = this.#pixelRatio;
+      const measuredSize = TextLayer.#quantizeFontSize(fontSize * this.#scale / pixelRatio) * pixelRatio;
+      TextLayer.#ensureCtxFont(ctx, measuredSize, fontFamily);
+      const {
+        width
+      } = ctx.measureText(div.textContent);
+      if (width > 0) {
+        style.setProperty("--scale-x", canvasWidth * measuredSize / (width * fontSize));
+      }
+    }
+    if (properties.angle !== 0) {
+      style.setProperty("--rotate", `${properties.angle}deg`);
+    }
+  }
+  static cleanup() {
+    if (this.#pendingTextLayers.size > 0) {
+      return;
+    }
+    this.#ascentCache.clear();
+    for (const {
+      canvas
+    } of this.#canvasContexts.values()) {
+      canvas.remove();
+    }
+    this.#canvasContexts.clear();
+  }
+  static #getCtx(lang = null) {
+    let ctx = this.#canvasContexts.get(lang ||= "");
+    if (!ctx) {
+      const canvas = document.createElement("canvas");
+      canvas.style.cssText = "position:absolute;top:0;left:0;width:0;height:0;display:none;" + "letter-spacing:normal;word-spacing:normal";
+      canvas.lang = lang;
+      document.body.append(canvas);

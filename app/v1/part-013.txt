@@ -1,0 +1,1000 @@
+      }, {
+        signal
+      });
+      button.addEventListener("mouseleave", () => {
+        if (this.#altTextTooltipTimeout) {
+          clearTimeout(this.#altTextTooltipTimeout);
+          this.#altTextTooltipTimeout = null;
+        }
+        this.#altTextTooltip?.classList.remove("show");
+      }, {
+        signal
+      });
+    }
+    if (this.#altTextDecorative) {
+      tooltip.setAttribute("data-l10n-id", "pdfjs-editor-alt-text-decorative-tooltip");
+    } else {
+      tooltip.removeAttribute("data-l10n-id");
+      tooltip.textContent = this.#altText;
+    }
+    if (!tooltip.parentNode) {
+      button.append(tooltip);
+    }
+    const element = this.#editor.getElementForAltText();
+    element?.setAttribute("aria-describedby", tooltip.id);
+  }
+}
+
+;// ./src/display/editor/comment.js
+
+class Comment {
+  #commentStandaloneButton = null;
+  #commentToolbarButton = null;
+  #commentWasFromKeyBoard = false;
+  #editor = null;
+  #initialText = null;
+  #richText = null;
+  #text = null;
+  #date = null;
+  #deleted = false;
+  #popupPosition = null;
+  constructor(editor) {
+    this.#editor = editor;
+  }
+  renderForToolbar() {
+    const button = this.#commentToolbarButton = document.createElement("button");
+    button.className = "comment";
+    return this.#render(button, false);
+  }
+  renderForStandalone() {
+    const button = this.#commentStandaloneButton = document.createElement("button");
+    button.className = "annotationCommentButton";
+    const position = this.#editor.commentButtonPosition;
+    if (position) {
+      const {
+        style
+      } = button;
+      style.insetInlineEnd = `calc(${100 * (this.#editor._uiManager.direction === "ltr" ? 1 - position[0] : position[0])}% - var(--comment-button-dim))`;
+      style.top = `calc(${100 * position[1]}% - var(--comment-button-dim))`;
+      const color = this.#editor.commentButtonColor;
+      if (color) {
+        style.backgroundColor = color;
+      }
+    }
+    return this.#render(button, true);
+  }
+  focusButton() {
+    setTimeout(() => {
+      (this.#commentStandaloneButton ?? this.#commentToolbarButton)?.focus();
+    }, 0);
+  }
+  onUpdatedColor() {
+    if (!this.#commentStandaloneButton) {
+      return;
+    }
+    const color = this.#editor.commentButtonColor;
+    if (color) {
+      this.#commentStandaloneButton.style.backgroundColor = color;
+    }
+    this.#editor._uiManager.updatePopupColor(this.#editor);
+  }
+  get commentButtonWidth() {
+    return (this.#commentStandaloneButton?.getBoundingClientRect().width ?? 0) / this.#editor.parent.boundingClientRect.width;
+  }
+  get commentPopupPositionInLayer() {
+    if (this.#popupPosition) {
+      return this.#popupPosition;
+    }
+    if (!this.#commentStandaloneButton) {
+      return null;
+    }
+    const {
+      x,
+      y,
+      height
+    } = this.#commentStandaloneButton.getBoundingClientRect();
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = this.#editor.parent.boundingClientRect;
+    return [(x - parentX) / parentWidth, (y + height - parentY) / parentHeight];
+  }
+  set commentPopupPositionInLayer(pos) {
+    this.#popupPosition = pos;
+  }
+  hasDefaultPopupPosition() {
+    return this.#popupPosition === null;
+  }
+  removeStandaloneCommentButton() {
+    this.#commentStandaloneButton?.remove();
+    this.#commentStandaloneButton = null;
+  }
+  removeToolbarCommentButton() {
+    this.#commentToolbarButton?.remove();
+    this.#commentToolbarButton = null;
+  }
+  setCommentButtonStates({
+    selected,
+    hasPopup
+  }) {
+    if (!this.#commentStandaloneButton) {
+      return;
+    }
+    this.#commentStandaloneButton.classList.toggle("selected", selected);
+    this.#commentStandaloneButton.ariaExpanded = hasPopup;
+  }
+  #render(comment, isStandalone) {
+    if (!this.#editor._uiManager.hasCommentManager()) {
+      return null;
+    }
+    comment.tabIndex = "0";
+    comment.ariaHasPopup = "dialog";
+    if (isStandalone) {
+      comment.ariaControls = "commentPopup";
+      comment.setAttribute("data-l10n-id", "pdfjs-show-comment-button");
+    } else {
+      comment.ariaControlsElements = [this.#editor._uiManager.getCommentDialogElement()];
+      comment.setAttribute("data-l10n-id", "pdfjs-editor-add-comment-button");
+    }
+    const signal = this.#editor._uiManager._signal;
+    if (!(signal instanceof AbortSignal) || signal.aborted) {
+      return comment;
+    }
+    comment.addEventListener("contextmenu", noContextMenu, {
+      signal
+    });
+    if (isStandalone) {
+      comment.addEventListener("focusin", e => {
+        this.#editor._focusEventsAllowed = false;
+        stopEvent(e);
+      }, {
+        capture: true,
+        signal
+      });
+      comment.addEventListener("focusout", e => {
+        this.#editor._focusEventsAllowed = true;
+        stopEvent(e);
+      }, {
+        capture: true,
+        signal
+      });
+    }
+    comment.addEventListener("pointerdown", event => event.stopPropagation(), {
+      signal
+    });
+    const onClick = event => {
+      event.preventDefault();
+      if (comment === this.#commentToolbarButton) {
+        this.edit();
+      } else {
+        this.#editor.toggleComment(true);
+      }
+    };
+    comment.addEventListener("click", onClick, {
+      capture: true,
+      signal
+    });
+    comment.addEventListener("keydown", event => {
+      if (event.target === comment && event.key === "Enter") {
+        this.#commentWasFromKeyBoard = true;
+        onClick(event);
+      }
+    }, {
+      signal
+    });
+    comment.addEventListener("pointerenter", () => {
+      this.#editor.toggleComment(false, true);
+    }, {
+      signal
+    });
+    comment.addEventListener("pointerleave", () => {
+      this.#editor.toggleComment(false, false);
+    }, {
+      signal
+    });
+    return comment;
+  }
+  edit(options) {
+    const position = this.commentPopupPositionInLayer;
+    let posX, posY;
+    if (position) {
+      [posX, posY] = position;
+    } else {
+      [posX, posY] = this.#editor.commentButtonPosition;
+      const {
+        width,
+        height,
+        x,
+        y
+      } = this.#editor;
+      posX = x + posX * width;
+      posY = y + posY * height;
+    }
+    const parentDimensions = this.#editor.parent.boundingClientRect;
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = parentDimensions;
+    this.#editor._uiManager.editComment(this.#editor, parentX + posX * parentWidth, parentY + posY * parentHeight, {
+      ...options,
+      parentDimensions
+    });
+  }
+  finish() {
+    if (!this.#commentToolbarButton) {
+      return;
+    }
+    this.#commentToolbarButton.focus({
+      focusVisible: this.#commentWasFromKeyBoard
+    });
+    this.#commentWasFromKeyBoard = false;
+  }
+  isDeleted() {
+    return this.#deleted || this.#text === "";
+  }
+  isEmpty() {
+    return this.#text === null;
+  }
+  hasBeenEdited() {
+    return this.isDeleted() || this.#text !== this.#initialText;
+  }
+  serialize() {
+    return this.data;
+  }
+  get data() {
+    return {
+      text: this.#text,
+      richText: this.#richText,
+      date: this.#date,
+      deleted: this.isDeleted()
+    };
+  }
+  set data(text) {
+    if (text !== this.#text) {
+      this.#richText = null;
+    }
+    if (text === null) {
+      this.#text = "";
+      this.#deleted = true;
+      return;
+    }
+    this.#text = text;
+    this.#date = new Date();
+    this.#deleted = false;
+  }
+  restoreData({
+    text,
+    richText,
+    date
+  }) {
+    this.#text = text;
+    this.#richText = richText;
+    this.#date = date;
+    this.#deleted = false;
+  }
+  setInitialText(text, richText = null) {
+    this.#initialText = text;
+    this.data = text;
+    this.#date = null;
+    this.#richText = richText;
+  }
+  shown() {}
+  destroy() {
+    this.#commentToolbarButton?.remove();
+    this.#commentToolbarButton = null;
+    this.#commentStandaloneButton?.remove();
+    this.#commentStandaloneButton = null;
+    this.#text = "";
+    this.#richText = null;
+    this.#date = null;
+    this.#editor = null;
+    this.#commentWasFromKeyBoard = false;
+    this.#deleted = false;
+  }
+}
+
+;// ./src/display/touch_manager.js
+
+
+
+
+
+
+
+
+
+function preventDefault(evt) {
+  evt.preventDefault();
+}
+const MIN_TOUCH_SPAN = 1e-4;
+function stopTouchEvent(evt) {
+  if (evt.cancelable) {
+    stopEvent(evt);
+    return true;
+  }
+  evt.stopPropagation();
+  return false;
+}
+class TouchManager {
+  #container;
+  #isPinching = false;
+  #isPinchingStopped = null;
+  #isPinchingDisabled;
+  #onPinchStart;
+  #onPinching;
+  #onPinchEnd;
+  #onPanning;
+  #ownsGesture = false;
+  #pointerDownAC = null;
+  #signal;
+  #touchIds = new Set();
+  #touchInfo = null;
+  #touchManagerAC;
+  #touchMoveAC = null;
+  #unconfirmedPinch = 0;
+  constructor({
+    container,
+    isPinchingDisabled = null,
+    isPinchingStopped = null,
+    onPinchStart = null,
+    onPinching = null,
+    onPinchEnd = null,
+    onPanning = null,
+    signal
+  }) {
+    this.#container = container;
+    this.#isPinchingStopped = isPinchingStopped;
+    this.#isPinchingDisabled = isPinchingDisabled;
+    this.#onPinchStart = onPinchStart;
+    this.#onPinching = onPinching;
+    this.#onPinchEnd = onPinchEnd;
+    this.#onPanning = onPanning;
+    this.#touchManagerAC = new AbortController();
+    this.#signal = AbortSignal.any([signal, this.#touchManagerAC.signal]);
+    container.addEventListener("touchstart", this.#onTouchStart.bind(this), {
+      passive: false,
+      signal: this.#signal
+    });
+  }
+  get MIN_TOUCH_DISTANCE_TO_PINCH() {
+    return 35 / OutputScale.pixelRatio;
+  }
+  get MIN_TOUCH_DISTANCE_TO_SCALE() {
+    return 4 / OutputScale.pixelRatio;
+  }
+  #onTouchStart(evt) {
+    if (this.#isPinchingDisabled?.()) {
+      return;
+    }
+    this.#pruneTouchIds(evt);
+    const touchIds = this.#touchIds;
+    for (const {
+      identifier
+    } of evt.changedTouches) {
+      touchIds.add(identifier);
+    }
+    if (touchIds.size === 1) {
+      this.#armPointerDown();
+      return;
+    }
+    if (!this.#touchMoveAC) {
+      this.#touchMoveAC = new AbortController();
+      const signal = AbortSignal.any([this.#signal, this.#touchMoveAC.signal]);
+      const container = this.#container;
+      const opt = {
+        signal,
+        capture: false,
+        passive: false
+      };
+      container.addEventListener("touchmove", this.#onTouchMove.bind(this), opt);
+      const onTouchEnd = this.#onTouchEnd.bind(this);
+      container.addEventListener("touchend", onTouchEnd, opt);
+      container.addEventListener("touchcancel", onTouchEnd, opt);
+      opt.capture = true;
+      container.addEventListener("pointerdown", stopEvent, opt);
+      container.addEventListener("pointermove", stopEvent, opt);
+      container.addEventListener("pointercancel", preventDefault, opt);
+      container.addEventListener("pointerup", preventDefault, opt);
+      this.#onPinchStart?.();
+    }
+    this.#ownsGesture = stopTouchEvent(evt);
+    this.#setTouchInfo(evt);
+  }
+  #armPointerDown() {
+    if (this.#pointerDownAC) {
+      return;
+    }
+    const pointerDownAC = this.#pointerDownAC = new AbortController();
+    const signal = AbortSignal.any([this.#signal, pointerDownAC.signal]);
+    const container = this.#container;
+    const opts = {
+      capture: true,
+      signal,
+      passive: false
+    };
+    const cancelPointerDown = e => {
+      if (e.pointerType === "touch") {
+        this.#pointerDownAC?.abort();
+        this.#pointerDownAC = null;
+      }
+    };
+    container.addEventListener("pointerdown", e => {
+      if (e.pointerType === "touch") {
+        stopEvent(e);
+        cancelPointerDown(e);
+      }
+    }, opts);
+    container.addEventListener("pointerup", cancelPointerDown, opts);
+    container.addEventListener("pointercancel", cancelPointerDown, opts);
+  }
+  #pruneTouchIds(evt) {
+    const previous = this.#touchIds;
+    if (previous.size === 0) {
+      return;
+    }
+    const touchIds = this.#touchIds = new Set();
+    for (const {
+      identifier
+    } of evt.touches) {
+      if (previous.has(identifier)) {
+        touchIds.add(identifier);
+      }
+    }
+  }
+  #getTrackedTouches(evt) {
+    const touchIds = this.#touchIds;
+    const touches = [];
+    for (const touch of evt.touches) {
+      if (touchIds.has(touch.identifier)) {
+        touches.push(touch);
+      }
+    }
+    return touches;
+  }
+  #setTouchInfo(evt) {
+    const touches = this.#getTrackedTouches(evt);
+    if (touches.length !== 2 || this.#isPinchingStopped?.()) {
+      this.#touchInfo = null;
+      return;
+    }
+    const [touch0, touch1] = touches;
+    this.#touchInfo = {
+      touch0X: touch0.screenX,
+      touch0Y: touch0.screenY,
+      touch1X: touch1.screenX,
+      touch1Y: touch1.screenY,
+      panX: (touch0.clientX + touch1.clientX) / 2,
+      panY: (touch0.clientY + touch1.clientY) / 2,
+      screenPanX: (touch0.screenX + touch1.screenX) / 2,
+      screenPanY: (touch0.screenY + touch1.screenY) / 2
+    };
+  }
+  #onTouchMove(evt) {
+    if (!this.#touchInfo) {
+      return;
+    }
+    const touches = this.#getTrackedTouches(evt);
+    if (touches.length !== 2) {
+      return;
+    }
+    const wasOwned = this.#ownsGesture;
+    this.#ownsGesture = stopTouchEvent(evt);
+    if (!this.#ownsGesture) {
+      return;
+    }
+    if (!wasOwned) {
+      this.#setTouchInfo(evt);
+      return;
+    }
+    const [touch0, touch1] = touches;
+    const {
+      screenX: screen0X,
+      screenY: screen0Y
+    } = touch0;
+    const {
+      screenX: screen1X,
+      screenY: screen1Y
+    } = touch1;
+    const touchInfo = this.#touchInfo;
+    const {
+      touch0X: pTouch0X,
+      touch0Y: pTouch0Y,
+      touch1X: pTouch1X,
+      touch1Y: pTouch1Y,
+      panX: pPanX,
+      panY: pPanY
+    } = touchInfo;
+    const prevGapX = pTouch1X - pTouch0X;
+    const prevGapY = pTouch1Y - pTouch0Y;
+    const currGapX = screen1X - screen0X;
+    const currGapY = screen1Y - screen0Y;
+    const panX = (touch0.clientX + touch1.clientX) / 2;
+    const panY = (touch0.clientY + touch1.clientY) / 2;
+    touchInfo.panX = panX;
+    touchInfo.panY = panY;
+    const dx = panX - pPanX;
+    const dy = panY - pPanY;
+    const screenPanX = (screen0X + screen1X) / 2;
+    const screenPanY = (screen0Y + screen1Y) / 2;
+    const translation = Math.hypot(screenPanX - touchInfo.screenPanX, screenPanY - touchInfo.screenPanY);
+    touchInfo.screenPanX = screenPanX;
+    touchInfo.screenPanY = screenPanY;
+    const distance = Math.hypot(currGapX, currGapY);
+    const pDistance = Math.hypot(prevGapX, prevGapY);
+    const minDistance = this.#isPinching ? this.MIN_TOUCH_DISTANCE_TO_SCALE : this.MIN_TOUCH_DISTANCE_TO_PINCH + 2 * translation;
+    if (distance < MIN_TOUCH_SPAN || pDistance < MIN_TOUCH_SPAN || Math.abs(pDistance - distance) <= minDistance) {
+      if (dx || dy) {
+        this.#onPanning?.(dx, dy);
+      }
+      return;
+    }
+    touchInfo.touch0X = screen0X;
+    touchInfo.touch0Y = screen0Y;
+    touchInfo.touch1X = screen1X;
+    touchInfo.touch1Y = screen1Y;
+    const direction = Math.sign(distance - pDistance);
+    if (!this.#isPinching) {
+      this.#isPinching = true;
+      this.#unconfirmedPinch = direction;
+      if (dx || dy) {
+        this.#onPanning?.(dx, dy);
+      }
+      return;
+    }
+    if (this.#unconfirmedPinch) {
+      const unconfirmed = this.#unconfirmedPinch;
+      this.#unconfirmedPinch = 0;
+      if (direction !== unconfirmed && Math.abs(distance - pDistance) <= 2 * translation) {
+        this.#isPinching = false;
+        if (dx || dy) {
+          this.#onPanning?.(dx, dy);
+        }
+        return;
+      }
+    }
+    this.#onPinching?.([pPanX, pPanY], pDistance, distance, dx, dy);
+  }
+  #onTouchEnd(evt) {
+    this.#pruneTouchIds(evt);
+    if (this.#touchIds.size >= 2) {
+      this.#setTouchInfo(evt);
+      return;
+    }
+    const wasTracking = !!this.#touchInfo;
+    this.#endGesture();
+    if (this.#touchIds.size === 1) {
+      this.#armPointerDown();
+    }
+    if (wasTracking) {
+      stopTouchEvent(evt);
+    }
+  }
+  #endGesture() {
+    this.#touchInfo = null;
+    this.#isPinching = false;
+    this.#unconfirmedPinch = 0;
+    this.#ownsGesture = false;
+    if (this.#touchMoveAC) {
+      this.#touchMoveAC.abort();
+      this.#touchMoveAC = null;
+      this.#onPinchEnd?.();
+    }
+  }
+  destroy() {
+    this.#endGesture();
+    this.#touchIds.clear();
+    this.#touchManagerAC?.abort();
+    this.#touchManagerAC = null;
+    this.#pointerDownAC?.abort();
+    this.#pointerDownAC = null;
+  }
+}
+
+;// ./src/display/editor/editor.js
+
+
+
+
+
+
+
+
+
+
+class AnnotationEditor {
+  #accessibilityData = null;
+  #allResizerDivs = null;
+  #altText = null;
+  #comment = null;
+  #commentStandaloneButton = null;
+  #disabled = false;
+  #dragPointerId = null;
+  #dragPointerType = "";
+  #resizersDiv = null;
+  #lastPointerCoords = null;
+  #savedDimensions = null;
+  #fakeAnnotation = null;
+  #focusAC = null;
+  #focusedResizerName = "";
+  #hasBeenClicked = false;
+  #initialRect = null;
+  #isEditing = false;
+  #isInEditMode = false;
+  #isResizerEnabledForKeyboard = false;
+  #moveInDOMTimeout = null;
+  #prevDragX = 0;
+  #prevDragY = 0;
+  #telemetryTimeouts = null;
+  #touchManager = null;
+  isSelected = false;
+  _isCopy = false;
+  _editToolbar = null;
+  _initialOptions = Object.create(null);
+  _initialData = null;
+  _isVisible = true;
+  _uiManager = null;
+  _focusEventsAllowed = true;
+  static _l10n = null;
+  static _l10nAlert = null;
+  static _l10nResizer = null;
+  #isDraggable = false;
+  #zIndex = AnnotationEditor._zIndex++;
+  static _borderLineWidth = -1;
+  static _colorManager = new ColorManager();
+  static _zIndex = 1;
+  static _telemetryTimeout = 1000;
+  static get _resizerKeyboardManager() {
+    const resize = AnnotationEditor.prototype._resizeWithKeyboard;
+    const small = AnnotationEditorUIManager.TRANSLATE_SMALL;
+    const big = AnnotationEditorUIManager.TRANSLATE_BIG;
+    return util_shadow(this, "_resizerKeyboardManager", new KeyboardManager([[["ArrowLeft"], resize, {
+      args: [-small, 0]
+    }], [["ctrl+ArrowLeft", "mac+shift+ArrowLeft"], resize, {
+      args: [-big, 0]
+    }], [["ArrowRight"], resize, {
+      args: [small, 0]
+    }], [["ctrl+ArrowRight", "mac+shift+ArrowRight"], resize, {
+      args: [big, 0]
+    }], [["ArrowUp"], resize, {
+      args: [0, -small]
+    }], [["ctrl+ArrowUp", "mac+shift+ArrowUp"], resize, {
+      args: [0, -big]
+    }], [["ArrowDown"], resize, {
+      args: [0, small]
+    }], [["ctrl+ArrowDown", "mac+shift+ArrowDown"], resize, {
+      args: [0, big]
+    }], [["Escape"], AnnotationEditor.prototype._stopResizingWithKeyboard]]));
+  }
+  constructor(parameters) {
+    this.parent = parameters.parent;
+    this.id = parameters.id;
+    this.width = this.height = null;
+    this.pageIndex = parameters.parent.pageIndex;
+    this.name = parameters.name;
+    this.div = null;
+    this._uiManager = parameters.uiManager;
+    this.annotationElementId = null;
+    this._willKeepAspectRatio = false;
+    this._initialOptions.isCentered = parameters.isCentered;
+    this._structTreeParentId = null;
+    this.annotationElementId = parameters.annotationElementId || null;
+    this.creationDate = parameters.creationDate || new Date();
+    this.modificationDate = parameters.modificationDate || null;
+    this.canAddComment = true;
+    const {
+      rotation,
+      rawDims: {
+        pageWidth,
+        pageHeight,
+        pageX,
+        pageY
+      }
+    } = this.parent.viewport;
+    this.rotation = rotation;
+    this.pageRotation = (360 + rotation - this._uiManager.viewParameters.rotation) % 360;
+    this.pageDimensions = [pageWidth, pageHeight];
+    this.pageTranslation = [pageX, pageY];
+    const [width, height] = this.parentDimensions;
+    this.x = parameters.x / width;
+    this.y = parameters.y / height;
+    this.isAttachedToDOM = false;
+    this.deleted = false;
+  }
+  updatePageIndex(newPageIndex) {
+    this.pageIndex = newPageIndex;
+  }
+  get editorType() {
+    return Object.getPrototypeOf(this).constructor._type;
+  }
+  get mode() {
+    return Object.getPrototypeOf(this).constructor._editorType;
+  }
+  static get isDrawer() {
+    return false;
+  }
+  static get _defaultLineColor() {
+    return util_shadow(this, "_defaultLineColor", this._colorManager.getHexCode("CanvasText"));
+  }
+  static deleteAnnotationElement(editor) {
+    const fakeEditor = new FakeEditor({
+      id: editor._uiManager.getId(),
+      parent: editor.parent,
+      uiManager: editor._uiManager
+    });
+    fakeEditor.annotationElementId = editor.annotationElementId;
+    fakeEditor.deleted = true;
+    fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
+  }
+  static initialize(l10n, _uiManager) {
+    AnnotationEditor._l10n ??= l10n;
+    AnnotationEditor._l10nAlert ??= Object.freeze({
+      highlight: "pdfjs-editor-highlight-added-alert",
+      freetext: "pdfjs-editor-freetext-added-alert",
+      ink: "pdfjs-editor-ink-added-alert",
+      stamp: "pdfjs-editor-stamp-added-alert",
+      signature: "pdfjs-editor-signature-added-alert"
+    });
+    AnnotationEditor._l10nResizer ??= Object.freeze({
+      topLeft: "pdfjs-editor-resizer-top-left",
+      topMiddle: "pdfjs-editor-resizer-top-middle",
+      topRight: "pdfjs-editor-resizer-top-right",
+      middleRight: "pdfjs-editor-resizer-middle-right",
+      bottomRight: "pdfjs-editor-resizer-bottom-right",
+      bottomMiddle: "pdfjs-editor-resizer-bottom-middle",
+      bottomLeft: "pdfjs-editor-resizer-bottom-left",
+      middleLeft: "pdfjs-editor-resizer-middle-left"
+    });
+    if (AnnotationEditor._borderLineWidth !== -1) {
+      return;
+    }
+    const style = getComputedStyle(document.documentElement);
+    AnnotationEditor._borderLineWidth = parseFloat(style.getPropertyValue("--outline-width")) || 0;
+  }
+  static updateDefaultParams(_type, _value) {}
+  static get defaultPropertiesToUpdate() {
+    return [];
+  }
+  static isHandlingMimeForPasting(mime) {
+    return false;
+  }
+  static paste(item, parent) {
+    unreachable("Not implemented");
+  }
+  get propertiesToUpdate() {
+    return [];
+  }
+  get _isDraggable() {
+    return this.#isDraggable;
+  }
+  set _isDraggable(value) {
+    this.#isDraggable = value;
+    this.div?.classList.toggle("draggable", value);
+  }
+  get uid() {
+    return this.annotationElementId || this.id;
+  }
+  get isEnterHandled() {
+    return true;
+  }
+  center() {
+    const [pageWidth, pageHeight] = this.pageDimensions;
+    switch (this.parentRotation) {
+      case 90:
+        this.x -= this.height * pageHeight / (pageWidth * 2);
+        this.y += this.width * pageWidth / (pageHeight * 2);
+        break;
+      case 180:
+        this.x += this.width / 2;
+        this.y += this.height / 2;
+        break;
+      case 270:
+        this.x += this.height * pageHeight / (pageWidth * 2);
+        this.y -= this.width * pageWidth / (pageHeight * 2);
+        break;
+      default:
+        this.x -= this.width / 2;
+        this.y -= this.height / 2;
+        break;
+    }
+    this.fixAndSetPosition();
+  }
+  addCommands(params) {
+    this._uiManager.addCommands(params);
+  }
+  get currentLayer() {
+    return this._uiManager.currentLayer;
+  }
+  setInBackground() {
+    this.div.style.zIndex = 0;
+  }
+  setInForeground() {
+    this.div.style.zIndex = this.#zIndex;
+  }
+  setParent(parent) {
+    if (parent !== null) {
+      this.pageIndex = parent.pageIndex;
+      this.pageDimensions = parent.pageDimensions;
+    } else {
+      this.#stopResizing();
+      this.#fakeAnnotation?.remove();
+      this.#fakeAnnotation = null;
+    }
+    this.parent = parent;
+  }
+  focusin(event) {
+    if (!this._focusEventsAllowed) {
+      return;
+    }
+    if (!this.#hasBeenClicked) {
+      this.parent.setSelected(this);
+    } else {
+      this.#hasBeenClicked = false;
+    }
+  }
+  focusout(event) {
+    if (!this._focusEventsAllowed || !this.isAttachedToDOM) {
+      return;
+    }
+    const target = event.relatedTarget;
+    if (target?.closest(`#${this.id}`)) {
+      return;
+    }
+    event.preventDefault();
+    if (!this.parent?.isMultipleSelection) {
+      this.commitOrRemove();
+    }
+  }
+  commitOrRemove() {
+    if (this.isEmpty()) {
+      this.remove();
+    } else {
+      this.commit();
+    }
+  }
+  commit() {
+    if (!this.isInEditMode()) {
+      return;
+    }
+    this.addToAnnotationStorage();
+  }
+  addToAnnotationStorage() {
+    this._uiManager.addToAnnotationStorage(this);
+  }
+  setAt(x, y, tx, ty) {
+    const [width, height] = this.parentDimensions;
+    [tx, ty] = this.screenToPageTranslation(tx, ty);
+    this.x = (x + tx) / width;
+    this.y = (y + ty) / height;
+    this.fixAndSetPosition();
+  }
+  _moveAfterPaste(baseX, baseY) {
+    if (this.isClone) {
+      delete this.isClone;
+      return;
+    }
+    const [parentWidth, parentHeight] = this.parentDimensions;
+    this.setAt(baseX * parentWidth, baseY * parentHeight, this.width * parentWidth, this.height * parentHeight);
+    this._onTranslated();
+  }
+  #translate([width, height], x, y) {
+    [x, y] = this.screenToPageTranslation(x, y);
+    this.x += x / width;
+    this.y += y / height;
+    this._onTranslating(this.x, this.y);
+    this.fixAndSetPosition();
+  }
+  translate(x, y) {
+    this.#translate(this.parentDimensions, x, y);
+  }
+  translateInPage(x, y) {
+    this.#initialRect ||= [this.x, this.y, this.width, this.height];
+    this.#translate(this.pageDimensions, x, y);
+    this.div.scrollIntoView({
+      block: "nearest"
+    });
+  }
+  translationDone() {
+    this._onTranslated(this.x, this.y);
+  }
+  drag(tx, ty) {
+    this.#initialRect ||= [this.x, this.y, this.width, this.height];
+    const {
+      div,
+      parentDimensions: [parentWidth, parentHeight]
+    } = this;
+    this.x += tx / parentWidth;
+    this.y += ty / parentHeight;
+    if (this.parent && (this.x < 0 || this.x > 1 || this.y < 0 || this.y > 1)) {
+      const {
+        x,
+        y
+      } = this.div.getBoundingClientRect();
+      if (this.parent.findNewParent(this, x, y)) {
+        this.x -= Math.floor(this.x);
+        this.y -= Math.floor(this.y);
+      }
+    }
+    let {
+      x,
+      y
+    } = this;
+    const [bx, by] = this.getBaseTranslation();
+    x += bx;
+    y += by;
+    const {
+      style
+    } = div;
+    style.left = `${(100 * x).toFixed(2)}%`;
+    style.top = `${(100 * y).toFixed(2)}%`;
+    this._onTranslating(x, y);
+  }
+  _onTranslating(x, y) {}
+  _onTranslated(x, y) {}
+  get _hasBeenMoved() {
+    return !!this.#initialRect && (this.#initialRect[0] !== this.x || this.#initialRect[1] !== this.y);
+  }
+  get _hasBeenResized() {
+    return !!this.#initialRect && (this.#initialRect[2] !== this.width || this.#initialRect[3] !== this.height);
+  }
+  getBaseTranslation() {
+    const [parentWidth, parentHeight] = this.parentDimensions;
+    const {
+      _borderLineWidth
+    } = AnnotationEditor;
+    const x = _borderLineWidth / parentWidth;
+    const y = _borderLineWidth / parentHeight;
+    switch (this.rotation) {
+      case 90:
+        return [-x, y];
+      case 180:
+        return [x, y];
+      case 270:
+        return [x, -y];
+      default:
+        return [-x, -y];
+    }
+  }
+  get _mustFixPosition() {
+    return true;
+  }
+  fixAndSetPosition(rotation = this.rotation) {
+    const {
+      div: {
+        style
+      },
+      pageDimensions: [pageWidth, pageHeight]
+    } = this;
+    let {
+      x,
+      y,
+      width,
+      height
+    } = this;
+    width *= pageWidth;
+    height *= pageHeight;
+    x *= pageWidth;
+    y *= pageHeight;
+    if (this._mustFixPosition) {
+      switch (rotation) {
+        case 0:
+          x = MathClamp(x, 0, pageWidth - width);
+          y = MathClamp(y, 0, pageHeight - height);
+          break;
+        case 90:
+          x = MathClamp(x, 0, pageWidth - height);
+          y = MathClamp(y, width, pageHeight);
+          break;
+        case 180:
+          x = MathClamp(x, width, pageWidth);
+          y = MathClamp(y, height, pageHeight);
+          break;
+        case 270:
+          x = MathClamp(x, height, pageWidth);
+          y = MathClamp(y, 0, pageHeight - width);
+          break;
+      }
+    }

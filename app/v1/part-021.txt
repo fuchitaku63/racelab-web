@@ -1,0 +1,1000 @@
+      ctx.transform(...current.textMatrix);
+    }
+    ctx.translate(current.x, current.y + current.textRise);
+    ctx.scale(textHScale, fontDirection);
+    const dependencyTracker = this.dependencyTracker;
+    this.dependencyTracker = dependencyTracker ? new CanvasNestedDependencyTracker(dependencyTracker, opIdx) : null;
+    for (i = 0; i < glyphsLength; ++i) {
+      glyph = glyphs[i];
+      if (typeof glyph === "number") {
+        spacingLength = spacingDir * glyph * fontSize / 1000;
+        this.ctx.translate(spacingLength, 0);
+        current.x += spacingLength * textHScale;
+        continue;
+      }
+      const spacing = (glyph.isSpace ? wordSpacing : 0) + charSpacing;
+      const operatorList = font.charProcOperatorList.get(glyph.operatorListId);
+      if (!operatorList) {
+        warn(`Type3 character "${glyph.operatorListId}" is not available.`);
+      } else if (this.contentVisible) {
+        this.save();
+        if (operatorList.fnArray[0] === OPS.setCharWidth) {
+          current.fillAlpha = current.strokeAlpha = 1;
+          ctx.globalAlpha = 1;
+        }
+        ctx.scale(fontSize, fontSize);
+        ctx.transform(...fontMatrix);
+        this.executeOperatorList(operatorList);
+        this.restore();
+      }
+      const p = [glyph.width, 0];
+      Util.applyTransform(p, fontMatrix);
+      width = p[0] * fontSize + spacing;
+      ctx.translate(width, 0);
+      current.x += width * textHScale;
+    }
+    ctx.restore();
+    if (dependencyTracker) {
+      this.dependencyTracker = dependencyTracker;
+    }
+  }
+  setCharWidth(opIdx, xWidth, yWidth) {}
+  setCharWidthAndBounds(opIdx, xWidth, yWidth, llx, lly, urx, ury) {
+    const clip = new Path2D();
+    clip.rect(llx, lly, urx - llx, ury - lly);
+    this.ctx.clip(clip);
+    this.dependencyTracker?.recordBBox(opIdx, this.ctx, llx, urx, lly, ury).recordClipBox(opIdx, this.ctx, llx, urx, lly, ury);
+    this.endPath(opIdx);
+  }
+  getColorN_Pattern(opIdx, IR) {
+    let pattern;
+    if (IR[0] === "TilingPattern") {
+      const baseTransform = this.baseTransform || getCurrentTransform(this.ctx);
+      const canvasGraphicsFactory = {
+        createCanvasGraphics: (ctx, renderingOpIdx) => new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
+          optionalContentConfig: this.optionalContentConfig,
+          markedContentStack: this.markedContentStack
+        }, undefined, undefined, this.dependencyTracker ? new CanvasNestedDependencyTracker(this.dependencyTracker, renderingOpIdx, true) : null)
+      };
+      pattern = new TilingPattern(IR, this.ctx, canvasGraphicsFactory, baseTransform);
+    } else {
+      pattern = this._getPattern(opIdx, IR[1], IR[2]);
+    }
+    return pattern;
+  }
+  setStrokeColorN(opIdx, ...args) {
+    this.dependencyTracker?.recordSimpleData("strokeColor", opIdx);
+    this.current.strokeColor = this.getColorN_Pattern(opIdx, args);
+    this.current.patternStroke = true;
+  }
+  setFillColorN(opIdx, ...args) {
+    this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
+    const pattern = this.current.fillColor = this.getColorN_Pattern(opIdx, args);
+    this.current.patternFill = true;
+    this.current.tilingPatternDims = pattern instanceof TilingPattern ? [0, 0, 0, 0] : null;
+  }
+  #transferColor(color) {
+    return this.current.transferMapsFallback?.applyToColor(color) ?? color;
+  }
+  setStrokeRGBColor(opIdx, color) {
+    this.dependencyTracker?.recordSimpleData("strokeColor", opIdx);
+    this.current.strokeColor = color;
+    this.ctx.strokeStyle = this.#transferColor(color);
+    this.current.patternStroke = false;
+  }
+  setStrokeTransparent(opIdx) {
+    this.dependencyTracker?.recordSimpleData("strokeColor", opIdx);
+    this.ctx.strokeStyle = this.current.strokeColor = "transparent";
+    this.current.patternStroke = false;
+  }
+  setFillRGBColor(opIdx, color) {
+    this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
+    this.current.fillColor = color;
+    this.ctx.fillStyle = this.#transferColor(color);
+    this.current.patternFill = false;
+    this.current.tilingPatternDims = null;
+  }
+  setFillTransparent(opIdx) {
+    this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
+    this.ctx.fillStyle = this.current.fillColor = "transparent";
+    this.current.patternFill = false;
+    this.current.tilingPatternDims = null;
+  }
+  _getPattern(opIdx, objId, matrix = null) {
+    const pattern = this.cachedPatterns.getOrInsertComputed(objId, () => getShadingPattern(this.getObject(opIdx, objId)));
+    if (matrix) {
+      pattern.matrix = matrix;
+    }
+    return pattern;
+  }
+  shadingFill(opIdx, objId) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    const ctx = this.ctx;
+    this.save(opIdx);
+    const pattern = this._getPattern(opIdx, objId);
+    ctx.fillStyle = pattern.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.SHADING, opIdx);
+    const inv = getCurrentTransformInverse(ctx);
+    if (inv) {
+      const {
+        width,
+        height
+      } = ctx.canvas;
+      const minMax = F32_BBOX_INIT.slice();
+      Util.axialAlignedBoundingBox([0, 0, width, height], inv, minMax);
+      const [x0, y0, x1, y1] = minMax;
+      this.ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    } else {
+      this.ctx.fillRect(-1e10, -1e10, 2e10, 2e10);
+    }
+    this.dependencyTracker?.resetBBox(opIdx).recordFullPageBBox(opIdx).recordDependencies(opIdx, Dependencies.transform).recordDependencies(opIdx, Dependencies.fill).recordOperation(opIdx);
+    this.compose(this.current.getClippedPathBoundingBox());
+    this.restore(opIdx);
+    this.#endKnockoutElement(started);
+  }
+  beginInlineImage() {
+    unreachable("Should not call beginInlineImage");
+  }
+  beginImageData() {
+    unreachable("Should not call beginImageData");
+  }
+  paintFormXObjectBegin(opIdx, matrix, bbox) {
+    if (!this.contentVisible) {
+      return;
+    }
+    this.save(opIdx);
+    this.baseTransformStack.push(this.baseTransform);
+    if (matrix) {
+      this.transform(opIdx, ...matrix);
+    }
+    this.baseTransform = getCurrentTransform(this.ctx);
+    if (bbox) {
+      Util.axialAlignedBoundingBox(bbox, this.baseTransform, this.current.minMax);
+      const [x0, y0, x1, y1] = bbox;
+      const clip = new Path2D();
+      clip.rect(x0, y0, x1 - x0, y1 - y0);
+      this.ctx.clip(clip);
+      this.dependencyTracker?.recordClipBox(opIdx, this.ctx, x0, x1, y0, y1);
+      this.endPath(opIdx);
+    }
+  }
+  paintFormXObjectEnd(opIdx) {
+    if (!this.contentVisible) {
+      return;
+    }
+    this.restore(opIdx);
+    this.baseTransform = this.baseTransformStack.pop();
+  }
+  beginGroup(opIdx, group) {
+    if (!this.contentVisible) {
+      return;
+    }
+    this.save(opIdx);
+    const {
+      inSMaskMode
+    } = this;
+    if (inSMaskMode) {
+      this.endSMaskMode();
+      this.current.activeSMask = null;
+    }
+    const currentCtx = this.ctx;
+    if ((!group.needsIsolation || !group.isolated && !group.hasSoftMask) && !group.knockout && !group.isGray && this.#knockoutGroupLevel === 0 && currentCtx.globalAlpha === 1 && currentCtx.globalCompositeOperation === "source-over" && !inSMaskMode) {
+      if (group.bbox) {
+        let clip = new Path2D();
+        const [x0, y0, x1, y1] = group.bbox;
+        clip.rect(x0, y0, x1 - x0, y1 - y0);
+        if (group.matrix) {
+          const path = new Path2D();
+          path.addPath(clip, new DOMMatrix(group.matrix));
+          clip = path;
+        }
+        currentCtx.clip(clip);
+      }
+      this.groupStack.push(null);
+      this.#groupStackMeta.push(null);
+      this.groupLevel++;
+      return;
+    }
+    if (!group.isolated && !group.knockout && this.#knockoutGroupLevel === 0) {
+      info("TODO: Fully support non-isolated non-knockout groups.");
+    }
+    const currentTransform = getCurrentTransform(currentCtx);
+    if (group.matrix) {
+      currentCtx.transform(...group.matrix);
+    }
+    const canvasBounds = [0, 0, currentCtx.canvas.width, currentCtx.canvas.height];
+    let bounds;
+    if (group.bbox) {
+      bounds = F32_BBOX_INIT.slice();
+      Util.axialAlignedBoundingBox(group.bbox, getCurrentTransform(currentCtx), bounds);
+      bounds = Util.intersect(bounds, canvasBounds) || [0, 0, 0, 0];
+    } else {
+      bounds = canvasBounds;
+    }
+    const offsetX = Math.floor(bounds[0]);
+    const offsetY = Math.floor(bounds[1]);
+    const drawnWidth = Math.max(Math.ceil(bounds[2]) - offsetX, 1);
+    const drawnHeight = Math.max(Math.ceil(bounds[3]) - offsetY, 1);
+    this.current.startNewPathAndClipBox([0, 0, drawnWidth, drawnHeight]);
+    const scratchCanvas = this.canvasFactory.create(drawnWidth, drawnHeight);
+    if (group.smask) {
+      this.smaskGroupCanvases.push(scratchCanvas);
+    }
+    const groupCtx = scratchCanvas.context;
+    const backdropCtx = group.knockout && !group.isolated ? currentCtx : null;
+    const hasInnerBackdrop = !group.isolated && !group.knockout && !group.smask && group.needsIsolation && this.#knockoutGroupLevel > 0;
+    const knockoutMaskEntry = group.knockout ? this.canvasFactory.create(drawnWidth, drawnHeight) : null;
+    const savedKnockoutLevel = this.#knockoutGroupLevel;
+    if (group.knockout) {
+      this.#knockoutGroupLevel++;
+    } else {
+      this.#knockoutGroupLevel = 0;
+    }
+    groupCtx.translate(-offsetX, -offsetY);
+    groupCtx.transform(...currentTransform);
+    const needsBackdropCopy = !group.isolated && !group.smask && group.needsIsolation;
+    const replaceBackdrop = needsBackdropCopy && !inSMaskMode && savedKnockoutLevel === 0 && !group.knockout && !group.isGray && group.hasSoftMask && currentCtx.globalAlpha === 1 && currentCtx.globalCompositeOperation === "source-over" && this.current.transferMaps === "none" && !this.current.transferMapsFallback;
+    if (needsBackdropCopy && (inSMaskMode || replaceBackdrop)) {
+      groupCtx.save();
+      groupCtx.setTransform(1, 0, 0, 1, 0, 0);
+      groupCtx.drawImage(currentCtx.canvas, -offsetX, -offsetY);
+      groupCtx.restore();
+    }
+    if (group.bbox) {
+      let clip = new Path2D();
+      const [x0, y0, x1, y1] = group.bbox;
+      clip.rect(x0, y0, x1 - x0, y1 - y0);
+      if (group.matrix) {
+        const path = new Path2D();
+        path.addPath(clip, new DOMMatrix(group.matrix));
+        clip = path;
+      }
+      groupCtx.clip(clip);
+    }
+    if (group.smask) {
+      this.smaskStack.push({
+        canvas: scratchCanvas.canvas,
+        context: groupCtx,
+        offsetX,
+        offsetY,
+        subtype: group.smask.subtype,
+        backdrop: group.smask.backdrop,
+        transferMap: group.smask.transferMap || null
+      });
+    }
+    if (!group.smask || this.dependencyTracker) {
+      currentCtx.setTransform(1, 0, 0, 1, 0, 0);
+      currentCtx.translate(offsetX, offsetY);
+      currentCtx.save();
+    }
+    copyCtxState(currentCtx, groupCtx);
+    this.ctx = groupCtx;
+    this.dependencyTracker?.inheritSimpleDataAsFutureForcedDependencies(["fillAlpha", "strokeAlpha", "globalCompositeOperation"]).pushBaseTransform(currentCtx);
+    this.setGState(opIdx, [["BM", "source-over"], ["ca", 1], ["CA", 1], ["TR", null]]);
+    this.groupStack.push(currentCtx);
+    this.#groupStackMeta.push({
+      backdropCtx,
+      savedKnockoutLevel,
+      offsetX,
+      offsetY,
+      hasInnerBackdrop,
+      replaceBackdrop,
+      knockoutMaskEntry,
+      knockoutTempEntry: null,
+      knockoutBackdropEntry: null
+    });
+    this.groupLevel++;
+  }
+  endGroup(opIdx, group) {
+    if (!this.contentVisible) {
+      return;
+    }
+    this.groupLevel--;
+    const groupCtx = this.ctx;
+    const ctx = this.groupStack.pop();
+    const groupMeta = this.#groupStackMeta.pop();
+    if (groupMeta) {
+      this.#knockoutGroupLevel = groupMeta.savedKnockoutLevel;
+    }
+    if (ctx === null) {
+      this.restore(opIdx);
+      return;
+    }
+    if (group.isGray) {
+      this.#convertGroupToGray(groupCtx);
+    }
+    this.ctx = ctx;
+    this.ctx.imageSmoothingEnabled = false;
+    this.dependencyTracker?.popBaseTransform();
+    if (group.smask) {
+      this.tempSMask = this.smaskStack.pop();
+      this.restore(opIdx);
+      if (this.dependencyTracker) {
+        this.ctx.restore();
+        if (this.inSMaskMode) {
+          this.ctx.setTransform(this.suspendedCtx.getTransform());
+        }
+      }
+      this.#destroyKnockoutPools(groupMeta);
+    } else {
+      this.ctx.restore();
+      const currentMtx = getCurrentTransform(this.ctx);
+      this.restore(opIdx);
+      this.current.transferMapsFallback?.applyToCanvas(groupCtx);
+      this.ctx.save();
+      this.ctx.setTransform(...currentMtx);
+      const dirtyBox = F32_BBOX_INIT.slice();
+      Util.axialAlignedBoundingBox([0, 0, groupCtx.canvas.width, groupCtx.canvas.height], currentMtx, dirtyBox);
+      const parentGroupMeta = this.#groupStackMeta.at(-1);
+      if (this.#knockoutGroupLevel > 0) {
+        if (groupMeta.hasInnerBackdrop) {
+          const {
+            width,
+            height
+          } = groupCtx.canvas;
+          const colorEntry = this.canvasFactory.create(width, height);
+          const colorCtx = colorEntry.context;
+          colorCtx.drawImage(ctx.canvas, groupMeta.offsetX, groupMeta.offsetY, width, height, 0, 0, width, height);
+          colorCtx.globalCompositeOperation = "source-over";
+          colorCtx.drawImage(groupCtx.canvas, 0, 0);
+          const shapeMaskEntry = this.#createKnockoutMaskCanvas(groupCtx.canvas);
+          colorCtx.globalCompositeOperation = "destination-in";
+          colorCtx.drawImage(shapeMaskEntry.canvas, 0, 0);
+          const sourceCompositeOperation = this.ctx.globalCompositeOperation;
+          const sourceAlpha = this.ctx.globalAlpha;
+          const sourceFilter = this.ctx.filter;
+          this.ctx.save();
+          this.ctx.setTransform(...currentMtx);
+          this.ctx.globalAlpha = 1;
+          if (FeatureTest.isCanvasFilterSupported) {
+            this.ctx.filter = "none";
+          }
+          this.ctx.globalCompositeOperation = "destination-out";
+          this.ctx.drawImage(shapeMaskEntry.canvas, 0, 0);
+          this.ctx.globalCompositeOperation = sourceCompositeOperation;
+          this.ctx.globalAlpha = sourceAlpha;
+          if (FeatureTest.isCanvasFilterSupported) {
+            this.ctx.filter = sourceFilter ?? "none";
+          }
+          this.ctx.drawImage(colorEntry.canvas, 0, 0);
+          this.ctx.restore();
+          this.canvasFactory.destroy(shapeMaskEntry);
+          this.canvasFactory.destroy(colorEntry);
+        } else {
+          const backdropCtx = parentGroupMeta?.backdropCtx ?? null;
+          this.#compositeKnockoutSurface(this.ctx, groupCtx.canvas, {
+            backdropCanvas: backdropCtx?.canvas ?? null,
+            destTransform: currentMtx,
+            backdropOffset: backdropCtx ? [parentGroupMeta.offsetX + groupMeta.offsetX, parentGroupMeta.offsetY + groupMeta.offsetY] : [0, 0],
+            sourceAlpha: this.ctx.globalAlpha,
+            sourceFilter: this.ctx.filter
+          });
+        }
+      } else {
+        if (groupMeta.replaceBackdrop) {
+          const clip = new Path2D();
+          clip.rect(0, 0, groupCtx.canvas.width, groupCtx.canvas.height);
+          this.ctx.clip(clip);
+          this.ctx.globalCompositeOperation = "copy";
+        }
+        this.ctx.drawImage(groupCtx.canvas, 0, 0);
+      }
+      this.ctx.restore();
+      this.canvasFactory.destroy({
+        canvas: groupCtx.canvas,
+        context: groupCtx
+      });
+      this.#destroyKnockoutPools(groupMeta);
+      this.compose(dirtyBox);
+    }
+  }
+  #convertGroupToGray(groupCtx) {
+    const {
+      canvas
+    } = groupCtx;
+    const {
+      width,
+      height
+    } = canvas;
+    if (FeatureTest.isCanvasFilterSupported) {
+      groupCtx.save();
+      groupCtx.setTransform(1, 0, 0, 1, 0, 0);
+      groupCtx.filter = "grayscale(1)";
+      groupCtx.globalAlpha = 1;
+      groupCtx.globalCompositeOperation = "copy";
+      groupCtx.drawImage(canvas, 0, 0);
+      groupCtx.restore();
+      return;
+    }
+    const imageData = groupCtx.getImageData(0, 0, width, height);
+    const {
+      data
+    } = imageData;
+    for (let i = 0, ii = data.length; i < ii; i += 4) {
+      const gray = data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722 + 0.5 | 0;
+      data[i] = data[i + 1] = data[i + 2] = gray;
+    }
+    groupCtx.putImageData(imageData, 0, 0);
+  }
+  #destroyKnockoutPools(groupMeta) {
+    if (!groupMeta) {
+      return;
+    }
+    if (groupMeta.knockoutMaskEntry) {
+      this.canvasFactory.destroy(groupMeta.knockoutMaskEntry);
+      groupMeta.knockoutMaskEntry = null;
+    }
+    if (groupMeta.knockoutTempEntry) {
+      this.canvasFactory.destroy(groupMeta.knockoutTempEntry);
+      groupMeta.knockoutTempEntry = null;
+    }
+    if (groupMeta.knockoutBackdropEntry) {
+      this.canvasFactory.destroy(groupMeta.knockoutBackdropEntry);
+      groupMeta.knockoutBackdropEntry = null;
+    }
+  }
+  beginAnnotation(opIdx, id, rect, transform, matrix, hasOwnCanvas, canvasName) {
+    this.#restoreInitialState();
+    resetCtxToDefault(this.ctx);
+    this.ctx.save();
+    this.save(opIdx);
+    if (this.baseTransform) {
+      this.ctx.setTransform(...this.baseTransform);
+    }
+    if (rect) {
+      const width = rect[2] - rect[0];
+      const height = rect[3] - rect[1];
+      if (hasOwnCanvas && this.annotationCanvasMap) {
+        transform = transform.slice();
+        transform[4] -= rect[0];
+        transform[5] -= rect[1];
+        Util.singularValueDecompose2dScale(getCurrentTransform(this.ctx), XY);
+        const {
+          viewportScale
+        } = this;
+        const canvasWidth = Math.ceil(width * this.outputScaleX * viewportScale);
+        const canvasHeight = Math.ceil(height * this.outputScaleY * viewportScale);
+        this.annotationCanvas = this.canvasFactory.create(canvasWidth, canvasHeight);
+        const {
+          canvas,
+          context
+        } = this.annotationCanvas;
+        if (canvasName) {
+          const canvases = this.annotationCanvasMap.getOrInsertComputed(id, makeArr);
+          canvas.setAttribute("data-canvas-name", canvasName);
+          const index = canvases.findIndex(c => c.getAttribute("data-canvas-name") === canvasName);
+          if (index === -1) {
+            canvases.push(canvas);
+          } else {
+            canvases[index] = canvas;
+          }
+        } else {
+          this.annotationCanvasMap.set(id, canvas);
+        }
+        this.annotationCanvas.savedCtx = this.ctx;
+        this.ctx = context;
+        this.ctx.save();
+        this.ctx.setTransform(XY[0], 0, 0, -XY[1], 0, height * XY[1]);
+        resetCtxToDefault(this.ctx);
+      } else {
+        resetCtxToDefault(this.ctx);
+        this.endPath(opIdx);
+        const clip = new Path2D();
+        clip.rect(rect[0], rect[1], width, height);
+        this.ctx.clip(clip);
+      }
+    }
+    this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
+    this.baseTransformStack.push(this.baseTransform);
+    this.transform(opIdx, ...transform);
+    this.transform(opIdx, ...matrix);
+    this.baseTransform = getCurrentTransform(this.ctx);
+  }
+  endAnnotation(opIdx) {
+    if (this.annotationCanvas) {
+      this.ctx.restore();
+      this.#drawFilter();
+      this.ctx = this.annotationCanvas.savedCtx;
+      delete this.annotationCanvas.savedCtx;
+      delete this.annotationCanvas;
+    }
+    this.baseTransform = this.baseTransformStack.pop();
+  }
+  paintImageMaskXObject(opIdx, img) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const count = img.count;
+    img = this.getObject(opIdx, img.data, img);
+    img.count = count;
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    const ctx = this.ctx;
+    const mask = this._createMaskCanvas(opIdx, img);
+    const maskCanvas = mask.canvas;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(maskCanvas, mask.offsetX, mask.offsetY);
+    this.dependencyTracker?.resetBBox(opIdx).recordBBox(opIdx, this.ctx, mask.offsetX, mask.offsetX + maskCanvas.width, mask.offsetY, mask.offsetY + maskCanvas.height).recordOperation(opIdx);
+    ctx.restore();
+    if (mask.canvasEntry) {
+      this.canvasFactory.destroy(mask.canvasEntry);
+    }
+    this.compose();
+    this.#endKnockoutElement(started);
+  }
+  paintImageMaskXObjectRepeat(opIdx, img, scaleX, skewX = 0, skewY = 0, scaleY, positions) {
+    if (!this.contentVisible) {
+      return;
+    }
+    img = this.getObject(opIdx, img.data, img);
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    const ctx = this.ctx;
+    ctx.save();
+    const currentTransform = getCurrentTransform(ctx);
+    ctx.transform(scaleX, skewX, skewY, scaleY, 0, 0);
+    const mask = this._createMaskCanvas(opIdx, img);
+    ctx.setTransform(1, 0, 0, 1, mask.offsetX - currentTransform[4], mask.offsetY - currentTransform[5]);
+    this.dependencyTracker?.resetBBox(opIdx);
+    for (let i = 0, ii = positions.length; i < ii; i += 2) {
+      const trans = Util.transform(currentTransform, [scaleX, skewX, skewY, scaleY, positions[i], positions[i + 1]]);
+      ctx.drawImage(mask.canvas, trans[4], trans[5]);
+      this.dependencyTracker?.recordBBox(opIdx, this.ctx, trans[4], trans[4] + mask.canvas.width, trans[5], trans[5] + mask.canvas.height);
+    }
+    ctx.restore();
+    if (mask.canvasEntry) {
+      this.canvasFactory.destroy(mask.canvasEntry);
+    }
+    this.compose();
+    this.dependencyTracker?.recordOperation(opIdx);
+    this.#endKnockoutElement(started);
+  }
+  paintImageMaskXObjectGroup(opIdx, images) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    const ctx = this.ctx;
+    const isPatternFill = this.current.patternFill;
+    const fillColor = isPatternFill ? this.current.fillColor : ctx.fillStyle;
+    this.dependencyTracker?.resetBBox(opIdx).recordDependencies(opIdx, Dependencies.transformAndFill);
+    for (const image of images) {
+      const {
+        data,
+        width,
+        height,
+        transform
+      } = image;
+      const maskCanvas = this.canvasFactory.create(width, height);
+      const maskCtx = maskCanvas.context;
+      maskCtx.save();
+      const img = this.getObject(opIdx, data, image);
+      putBinaryImageMask(maskCtx, img);
+      maskCtx.globalCompositeOperation = "source-in";
+      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, getCurrentTransformInverse(ctx), PathType.FILL, opIdx) : fillColor;
+      maskCtx.fillRect(0, 0, width, height);
+      maskCtx.restore();
+      ctx.save();
+      ctx.transform(...transform);
+      ctx.scale(1, -1);
+      drawImageAtIntegerCoords(ctx, maskCanvas.canvas, 0, 0, width, height, 0, -1, 1, 1);
+      this.canvasFactory.destroy(maskCanvas);
+      this.dependencyTracker?.recordBBox(opIdx, ctx, 0, width, 0, height);
+      ctx.restore();
+    }
+    this.compose();
+    this.dependencyTracker?.recordOperation(opIdx);
+    this.#endKnockoutElement(started);
+  }
+  paintImageXObject(opIdx, objId) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const imgData = this.getObject(opIdx, objId);
+    if (!imgData) {
+      warn("Dependent image isn't ready yet");
+      return;
+    }
+    this.paintInlineImageXObject(opIdx, imgData);
+  }
+  paintImageXObjectRepeat(opIdx, objId, scaleX, scaleY, positions) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const imgData = this.getObject(opIdx, objId);
+    if (!imgData) {
+      warn("Dependent image isn't ready yet");
+      return;
+    }
+    const width = imgData.width;
+    const height = imgData.height;
+    const map = [];
+    for (let i = 0, ii = positions.length; i < ii; i += 2) {
+      map.push({
+        transform: [scaleX, 0, 0, scaleY, positions[i], positions[i + 1]],
+        x: 0,
+        y: 0,
+        w: width,
+        h: height
+      });
+    }
+    this.paintInlineImageXObjectGroup(opIdx, imgData, map);
+  }
+  applyTransferMapsToCanvas(ctx) {
+    if (this.current.transferMaps !== "none") {
+      ctx.filter = this.current.transferMaps;
+      ctx.drawImage(ctx.canvas, 0, 0);
+      ctx.filter = "none";
+    } else {
+      this.current.transferMapsFallback?.applyToCanvas(ctx);
+    }
+    return ctx.canvas;
+  }
+  applyTransferMapsToBitmap(imgData) {
+    const {
+      transferMaps,
+      transferMapsFallback
+    } = this.current;
+    if (transferMaps === "none" && !transferMapsFallback) {
+      return {
+        img: imgData.bitmap,
+        canvasEntry: null
+      };
+    }
+    const {
+      bitmap,
+      width,
+      height
+    } = imgData;
+    const tmpCanvas = this.canvasFactory.create(width, height);
+    const tmpCtx = tmpCanvas.context;
+    tmpCtx.filter = transferMaps;
+    tmpCtx.drawImage(bitmap, 0, 0);
+    tmpCtx.filter = "none";
+    transferMapsFallback?.applyToCanvas(tmpCtx);
+    return {
+      img: tmpCanvas.canvas,
+      canvasEntry: tmpCanvas
+    };
+  }
+  paintInlineImageXObject(opIdx, imgData) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const width = imgData.width;
+    const height = imgData.height;
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    const ctx = this.ctx;
+    this.save(opIdx);
+    const {
+      filter
+    } = ctx;
+    if (filter !== "none" && filter !== "") {
+      ctx.filter = "none";
+    }
+    ctx.scale(1 / width, -1 / height);
+    let imgToPaint;
+    let inlineImgCanvas = null;
+    if (imgData.bitmap) {
+      const result = this.applyTransferMapsToBitmap(imgData);
+      imgToPaint = result.img;
+      inlineImgCanvas = result.canvasEntry;
+    } else {
+      const tmpCanvas = this.canvasFactory.create(width, height);
+      putBinaryImageData(tmpCanvas.context, imgData);
+      imgToPaint = this.applyTransferMapsToCanvas(tmpCanvas.context);
+      inlineImgCanvas = tmpCanvas;
+    }
+    const scaled = this._scaleImage(imgToPaint, getCurrentTransformInverse(ctx));
+    ctx.imageSmoothingEnabled = getImageSmoothingEnabled(getCurrentTransform(ctx), imgData.interpolate);
+    if (this.dependencyTracker) {
+      this.dependencyTracker.resetBBox(opIdx).recordBBox(opIdx, ctx, 0, width, -height, 0).recordDependencies(opIdx, Dependencies.imageXObject).recordOperation(opIdx);
+      this.imagesTracker?.record(ctx, width, height, this.dependencyTracker.clipBox);
+    }
+    drawImageAtIntegerCoords(ctx, scaled.img, 0, 0, scaled.paintWidth, scaled.paintHeight, 0, -height, width, height);
+    if (scaled.tmpCanvas) {
+      this.canvasFactory.destroy(scaled.tmpCanvas);
+    }
+    if (inlineImgCanvas) {
+      this.canvasFactory.destroy(inlineImgCanvas);
+    }
+    this.compose();
+    this.restore(opIdx);
+    this.#endKnockoutElement(started);
+  }
+  paintInlineImageXObjectGroup(opIdx, imgData, map) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    const ctx = this.ctx;
+    let imgToPaint;
+    let inlineImgCanvas = null;
+    if (imgData.bitmap && !this.current.transferMapsFallback) {
+      imgToPaint = imgData.bitmap;
+    } else if (imgData.bitmap) {
+      ({
+        img: imgToPaint,
+        canvasEntry: inlineImgCanvas
+      } = this.applyTransferMapsToBitmap(imgData));
+    } else {
+      const w = imgData.width;
+      const h = imgData.height;
+      const tmpCanvas = this.canvasFactory.create(w, h);
+      putBinaryImageData(tmpCanvas.context, imgData);
+      imgToPaint = this.applyTransferMapsToCanvas(tmpCanvas.context);
+      inlineImgCanvas = tmpCanvas;
+    }
+    this.dependencyTracker?.resetBBox(opIdx);
+    for (const entry of map) {
+      ctx.save();
+      ctx.transform(...entry.transform);
+      ctx.scale(1, -1);
+      drawImageAtIntegerCoords(ctx, imgToPaint, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
+      this.dependencyTracker?.recordBBox(opIdx, ctx, 0, 1, -1, 0);
+      ctx.restore();
+    }
+    if (inlineImgCanvas) {
+      this.canvasFactory.destroy(inlineImgCanvas);
+    }
+    this.dependencyTracker?.recordOperation(opIdx);
+    this.compose();
+    this.#endKnockoutElement(started);
+  }
+  paintSolidColorImageMask(opIdx) {
+    if (!this.contentVisible) {
+      return;
+    }
+    const started = this.#beginKnockoutElement(this.current.fillAlpha);
+    this.dependencyTracker?.resetBBox(opIdx).recordBBox(opIdx, this.ctx, 0, 1, 0, 1).recordDependencies(opIdx, Dependencies.fill).recordOperation(opIdx);
+    this.ctx.fillRect(0, 0, 1, 1);
+    this.compose();
+    this.#endKnockoutElement(started);
+  }
+  markPoint(opIdx, tag) {}
+  markPointProps(opIdx, tag, properties) {}
+  beginMarkedContent(opIdx, tag) {
+    this.dependencyTracker?.beginMarkedContent(opIdx);
+    this.markedContentStack.push({
+      visible: true
+    });
+  }
+  beginMarkedContentProps(opIdx, tag, properties) {
+    this.dependencyTracker?.beginMarkedContent(opIdx);
+    if (tag === "OC") {
+      this.markedContentStack.push({
+        visible: this.optionalContentConfig.isVisible(properties)
+      });
+    } else {
+      this.markedContentStack.push({
+        visible: true
+      });
+    }
+    this.contentVisible = this.isContentVisible();
+  }
+  endMarkedContent(opIdx) {
+    this.dependencyTracker?.endMarkedContent(opIdx);
+    this.markedContentStack.pop();
+    this.contentVisible = this.isContentVisible();
+  }
+  beginCompat(opIdx) {}
+  endCompat(opIdx) {}
+  consumePath(opIdx, path, clipBox) {
+    const isEmpty = this.current.isEmptyClip();
+    if (this.pendingClip) {
+      this.current.updateClipFromPath();
+    }
+    if (!this.pendingClip) {
+      this.compose(clipBox);
+    }
+    const ctx = this.ctx;
+    if (this.pendingClip) {
+      if (!isEmpty) {
+        if (this.pendingClip === EO_CLIP) {
+          ctx.clip(path, "evenodd");
+        } else {
+          ctx.clip(path);
+        }
+      }
+      this.pendingClip = null;
+      this.dependencyTracker?.bboxToClipBoxDropOperation(opIdx).recordFutureForcedDependency("clipPath", opIdx);
+    } else {
+      this.dependencyTracker?.recordOperation(opIdx);
+    }
+    this.current.startNewPathAndClipBox(this.current.clipBox);
+  }
+  getSinglePixelWidth() {
+    const m = getCurrentTransform(this.ctx);
+    if (m[1] === 0 && m[2] === 0) {
+      return 1 / Math.min(Math.abs(m[0]), Math.abs(m[3]));
+    }
+    const absDet = Math.abs(m[0] * m[3] - m[2] * m[1]);
+    const normX = Math.hypot(m[0], m[2]);
+    const normY = Math.hypot(m[1], m[3]);
+    return Math.max(normX, normY) / absDet;
+  }
+  getScaleForStroking() {
+    if (this._cachedScaleForStroking[0] === -1) {
+      const {
+        lineWidth
+      } = this.current;
+      const {
+        a,
+        b,
+        c,
+        d
+      } = this.ctx.getTransform();
+      let scaleX, scaleY;
+      if (b === 0 && c === 0) {
+        const normX = Math.abs(a);
+        const normY = Math.abs(d);
+        if (normX === normY) {
+          if (lineWidth === 0) {
+            scaleX = scaleY = 1 / normX;
+          } else {
+            const scaledLineWidth = normX * lineWidth;
+            scaleX = scaleY = scaledLineWidth < 1 ? 1 / scaledLineWidth : 1;
+          }
+        } else if (lineWidth === 0) {
+          scaleX = 1 / normX;
+          scaleY = 1 / normY;
+        } else {
+          const scaledXLineWidth = normX * lineWidth;
+          const scaledYLineWidth = normY * lineWidth;
+          scaleX = scaledXLineWidth < 1 ? 1 / scaledXLineWidth : 1;
+          scaleY = scaledYLineWidth < 1 ? 1 / scaledYLineWidth : 1;
+        }
+      } else {
+        const absDet = Math.abs(a * d - b * c);
+        const normX = Math.hypot(a, b);
+        const normY = Math.hypot(c, d);
+        if (lineWidth === 0) {
+          scaleX = normY / absDet;
+          scaleY = normX / absDet;
+        } else {
+          const baseArea = lineWidth * absDet;
+          scaleX = normY > baseArea ? normY / baseArea : 1;
+          scaleY = normX > baseArea ? normX / baseArea : 1;
+        }
+      }
+      this._cachedScaleForStroking[0] = scaleX;
+      this._cachedScaleForStroking[1] = scaleY;
+    }
+    return this._cachedScaleForStroking;
+  }
+  rescaleAndStroke(path, saveRestore) {
+    const {
+      ctx,
+      current: {
+        lineWidth
+      }
+    } = this;
+    const [scaleX, scaleY] = this.getScaleForStroking();
+    if (scaleX === scaleY) {
+      ctx.lineWidth = (lineWidth || 1) * scaleX;
+      ctx.stroke(path);
+      return;
+    }
+    const SCALE_MATRIX = CanvasGraphics.#SCALE_MATRIX ??= new DOMMatrix();
+    const dashes = ctx.getLineDash();
+    if (saveRestore) {
+      ctx.save();
+    }
+    ctx.scale(scaleX, scaleY);
+    SCALE_MATRIX.a = 1 / scaleX;
+    SCALE_MATRIX.d = 1 / scaleY;
+    const newPath = new Path2D();
+    newPath.addPath(path, SCALE_MATRIX);
+    if (dashes.length > 0) {
+      const scale = Math.max(scaleX, scaleY);
+      ctx.setLineDash(dashes.map(x => x / scale));
+      ctx.lineDashOffset /= scale;
+    }
+    ctx.lineWidth = lineWidth || 1;
+    ctx.stroke(newPath);
+    if (saveRestore) {
+      ctx.restore();
+    }
+  }
+  isContentVisible() {
+    for (let i = this.markedContentStack.length - 1; i >= 0; i--) {
+      if (!this.markedContentStack[i].visible) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+for (const op in OPS) {
+  if (CanvasGraphics.prototype[op] !== undefined) {
+    CanvasGraphics.prototype[OPS[op]] = CanvasGraphics.prototype[op];
+  }
+}
+
+;// ./src/shared/base_pdf_stream.js
+
+
+
+
+
+
+
+
+class BasePDFStream {
+  #PDFStreamReader = null;
+  #PDFStreamRangeReader = null;
+  _fullReader = null;
+  _rangeReaders = new Set();
+  _source = null;
+  constructor(source, PDFStreamReader, PDFStreamRangeReader) {
+    this._source = source;
+    this.#PDFStreamReader = PDFStreamReader;
+    this.#PDFStreamRangeReader = PDFStreamRangeReader;
+  }
+  get _progressiveDataLength() {
+    return this._fullReader?._loaded ?? 0;
+  }
+  getFullReader() {
+    util_assert(!this._fullReader, "BasePDFStream.getFullReader can only be called once.");
+    return this._fullReader = new this.#PDFStreamReader(this);
+  }
+  getRangeReader(begin, end) {
+    if (end <= this._progressiveDataLength) {
+      return null;
+    }
+    const reader = new this.#PDFStreamRangeReader(this, begin, end);
+    this._rangeReaders.add(reader);
+    return reader;
+  }
+  cancelAllRequests(reason) {
+    this._fullReader?.cancel(reason);
+    for (const reader of new Set(this._rangeReaders)) {
+      reader.cancel(reason);
+    }
+  }
+}
+class BasePDFStreamReader {
+  onProgress = null;
+  _contentLength = 0;
+  _filename = null;
+  _headersCapability = Promise.withResolvers();
+  _isRangeSupported = false;
+  _isStreamingSupported = false;
+  _loaded = 0;
+  _stream = null;
+  constructor(stream) {
+    this._stream = stream;
+  }
+  _callOnProgress() {
+    this.onProgress?.({
+      loaded: this._loaded,
+      total: this._contentLength
+    });
+  }
+  get headersReady() {
+    return this._headersCapability.promise;
+  }
+  get filename() {
+    return this._filename;
+  }
+  get contentLength() {
+    return this._contentLength;
+  }
+  get isRangeSupported() {
+    return this._isRangeSupported;
+  }
+  get isStreamingSupported() {
+    return this._isStreamingSupported;
+  }
+  async read() {
+    unreachable("Abstract method `read` called");
+  }
+  cancel(reason) {
+    unreachable("Abstract method `cancel` called");
+  }
+}
+class BasePDFStreamRangeReader {
+  _stream = null;
+  constructor(stream, begin, end) {
+    this._stream = stream;

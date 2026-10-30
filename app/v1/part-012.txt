@@ -1,0 +1,1000 @@
+    const hasChanged = Object.entries(details).some(([key, value]) => this.#previousStates[key] !== value);
+    if (hasChanged) {
+      this._eventBus.dispatch("editingstateschanged", {
+        source: this,
+        details: Object.assign(this.#previousStates, details)
+      });
+      if (this.#mode === AnnotationEditorType.HIGHLIGHT && details.hasSelectedEditor === false) {
+        this.#dispatchUpdateUI([[AnnotationEditorParamsType.HIGHLIGHT_FREE, true]]);
+      }
+    }
+  }
+  #dispatchUpdateUI(details) {
+    this._eventBus.dispatch("annotationeditorparamschanged", {
+      source: this,
+      details
+    });
+  }
+  setEditingState(isEditing) {
+    if (isEditing) {
+      this.#addFocusManager();
+      this.#addCopyPasteListeners();
+      this.#dispatchUpdateStates({
+        isEditing: this.#mode !== AnnotationEditorType.NONE,
+        isEmpty: this.#isEmpty(),
+        hasSomethingToUndo: this.#commandManager.hasSomethingToUndo(),
+        hasSomethingToRedo: this.#commandManager.hasSomethingToRedo(),
+        hasSelectedEditor: false
+      });
+    } else {
+      this.#removeFocusManager();
+      this.#removeCopyPasteListeners();
+      this.#dispatchUpdateStates({
+        isEditing: false
+      });
+      this.disableUserSelect(false);
+    }
+  }
+  registerEditorTypes(types) {
+    if (this.#editorTypes) {
+      return;
+    }
+    this.#editorTypes = types;
+    for (const editorType of this.#editorTypes) {
+      this.#dispatchUpdateUI(editorType.defaultPropertiesToUpdate);
+    }
+  }
+  getId() {
+    return this.#idManager.id;
+  }
+  get currentLayer() {
+    return this.#allLayers.get(this.#currentPageIndex);
+  }
+  getLayer(pageIndex) {
+    return this.#allLayers.get(pageIndex);
+  }
+  get currentPageIndex() {
+    return this.#currentPageIndex;
+  }
+  addLayer(layer) {
+    this.#allLayers.set(layer.pageIndex, layer);
+    if (this.#isEnabled) {
+      layer.enable();
+    } else {
+      layer.disable();
+    }
+  }
+  removeLayer(layer) {
+    this.#allLayers.delete(layer.pageIndex);
+  }
+  async updateMode(mode, editId = null, isFromUser = false, isFromKeyboard = false, mustEnterInEditMode = false, editComment = false) {
+    if (this.#mode === mode) {
+      return;
+    }
+    if (this.#updateModeCapability) {
+      await this.#updateModeCapability.promise;
+      if (!this.#updateModeCapability) {
+        return;
+      }
+    }
+    this.#updateModeCapability = Promise.withResolvers();
+    this.#currentDrawingSession?.commitOrRemove();
+    if (this.#mode === AnnotationEditorType.POPUP) {
+      this.#commentManager?.hideSidebar();
+    }
+    this.#commentManager?.destroyPopup();
+    this.#mode = mode;
+    if (mode === AnnotationEditorType.NONE) {
+      this.setEditingState(false);
+      this.#disableAll();
+      for (const editor of this.#allEditors.values()) {
+        editor.hideStandaloneCommentButton();
+      }
+      this._editorUndoBar?.hide();
+      this.toggleComment(null);
+      this.#updateModeCapability.resolve();
+      return;
+    }
+    for (const editor of this.#allEditors.values()) {
+      editor.addStandaloneCommentButton();
+    }
+    if (mode === AnnotationEditorType.SIGNATURE) {
+      await this.#signatureManager?.loadSignatures();
+    }
+    if (isFromUser) {
+      CurrentPointers.clearPointerType();
+    }
+    this.setEditingState(true);
+    await this.#enableAll();
+    this.unselectAll();
+    for (const layer of this.#allLayers.values()) {
+      layer.updateMode(mode);
+    }
+    if (mode === AnnotationEditorType.POPUP) {
+      this.#allEditableAnnotations ||= await this.#pdfDocument.getAnnotationsByType(new Set(this.#editorTypes.map(editorClass => editorClass._editorType)));
+      const elementIds = new Set();
+      const allComments = [];
+      for (const editor of this.#allEditors.values()) {
+        const {
+          annotationElementId,
+          hasComment,
+          deleted
+        } = editor;
+        if (annotationElementId) {
+          elementIds.add(annotationElementId);
+        }
+        if (hasComment && !deleted) {
+          allComments.push(editor.getData());
+        }
+      }
+      for (const annotation of this.#allEditableAnnotations) {
+        const {
+          id,
+          popupRef,
+          contentsObj
+        } = annotation;
+        if (popupRef && contentsObj?.str && !elementIds.has(id) && !this.#deletedAnnotationsElementIds.has(id)) {
+          allComments.push(annotation);
+        }
+      }
+      this.#commentManager?.showSidebar(allComments);
+    }
+    if (!editId) {
+      if (isFromKeyboard) {
+        this.addNewEditorFromKeyboard();
+      }
+      this.#updateModeCapability.resolve();
+      return;
+    }
+    for (const editor of this.#allEditors.values()) {
+      if (editor.uid === editId) {
+        this.setSelected(editor);
+        if (editComment) {
+          editor.editComment();
+        } else if (mustEnterInEditMode) {
+          editor.enterInEditMode();
+        } else {
+          editor.focus();
+        }
+      } else {
+        editor.unselect();
+      }
+    }
+    this.#updateModeCapability.resolve();
+  }
+  addNewEditorFromKeyboard() {
+    if (this.currentLayer.canCreateNewEmptyEditor()) {
+      this.currentLayer.addNewEditor();
+    }
+  }
+  updateToolbar(options) {
+    if (options.mode === this.#mode) {
+      return;
+    }
+    this._eventBus.dispatch("switchannotationeditormode", {
+      source: this,
+      ...options
+    });
+  }
+  updateParams(type, value) {
+    if (!this.#editorTypes) {
+      return;
+    }
+    switch (type) {
+      case AnnotationEditorParamsType.CREATE:
+        this.currentLayer.addNewEditor(value);
+        return;
+      case AnnotationEditorParamsType.HIGHLIGHT_SHOW_ALL:
+        this._eventBus.dispatch("reporttelemetry", {
+          source: this,
+          details: {
+            type: "editing",
+            data: {
+              type: "highlight",
+              action: "toggle_visibility"
+            }
+          }
+        });
+        (this.#showAllStates ||= new Map()).set(type, value);
+        this.showAllEditors("highlight", value);
+        break;
+    }
+    if (this.hasSelection) {
+      for (const editor of this.#selectedEditors) {
+        editor.updateParams(type, value);
+      }
+    } else {
+      for (const editorType of this.#editorTypes) {
+        editorType.updateDefaultParams(type, value);
+      }
+    }
+  }
+  showAllEditors(type, visible, updateButton = false) {
+    for (const editor of this.#allEditors.values()) {
+      if (editor.editorType === type) {
+        editor.show(visible);
+      }
+    }
+    const state = this.#showAllStates?.get(AnnotationEditorParamsType.HIGHLIGHT_SHOW_ALL) ?? true;
+    if (state !== visible) {
+      this.#dispatchUpdateUI([[AnnotationEditorParamsType.HIGHLIGHT_SHOW_ALL, visible]]);
+    }
+  }
+  enableWaiting(mustWait = false) {
+    if (this.#isWaiting === mustWait) {
+      return;
+    }
+    this.#isWaiting = mustWait;
+    for (const layer of this.#allLayers.values()) {
+      if (mustWait) {
+        layer.disableClick();
+      } else {
+        layer.enableClick();
+      }
+      layer.div.classList.toggle("waiting", mustWait);
+    }
+  }
+  async #enableAll() {
+    if (!this.#isEnabled) {
+      this.#isEnabled = true;
+      const promises = [];
+      for (const layer of this.#allLayers.values()) {
+        promises.push(layer.enable());
+      }
+      await Promise.all(promises);
+      for (const editor of this.#allEditors.values()) {
+        editor.enable();
+      }
+    }
+  }
+  #disableAll() {
+    this.unselectAll();
+    if (this.#isEnabled) {
+      this.#isEnabled = false;
+      for (const layer of this.#allLayers.values()) {
+        layer.disable();
+      }
+      for (const editor of this.#allEditors.values()) {
+        editor.disable();
+      }
+    }
+  }
+  *getEditors(pageIndex) {
+    for (const editor of this.#allEditors.values()) {
+      if (editor.pageIndex === pageIndex) {
+        yield editor;
+      }
+    }
+  }
+  getEditor(id) {
+    return this.#allEditors.get(id);
+  }
+  addEditor(editor) {
+    this.#allEditors.set(editor.id, editor);
+  }
+  removeEditor(editor) {
+    if (editor.div.contains(document.activeElement)) {
+      if (this.#focusMainContainerTimeoutId) {
+        clearTimeout(this.#focusMainContainerTimeoutId);
+      }
+      this.#focusMainContainerTimeoutId = setTimeout(() => {
+        this.focusMainContainer();
+        this.#focusMainContainerTimeoutId = null;
+      }, 0);
+    }
+    this.#allEditors.delete(editor.id);
+    if (editor.annotationElementId) {
+      this.#missingCanvases?.delete(editor.annotationElementId);
+    }
+    this.unselect(editor);
+    if (!editor.annotationElementId || !this.#deletedAnnotationsElementIds.has(editor.annotationElementId)) {
+      this.#annotationStorage?.remove(editor.id);
+    }
+  }
+  addDeletedAnnotationElement(editor) {
+    this.#deletedAnnotationsElementIds.add(editor.annotationElementId);
+    this.addChangedExistingAnnotation(editor);
+    editor.deleted = true;
+  }
+  isDeletedAnnotationElement(annotationElementId) {
+    return this.#deletedAnnotationsElementIds.has(annotationElementId);
+  }
+  removeDeletedAnnotationElement(editor) {
+    this.#deletedAnnotationsElementIds.delete(editor.annotationElementId);
+    this.removeChangedExistingAnnotation(editor);
+    editor.deleted = false;
+  }
+  #addEditorToLayer(editor) {
+    const layer = this.#allLayers.get(editor.pageIndex);
+    if (layer) {
+      layer.addOrRebuild(editor);
+    } else {
+      this.addEditor(editor);
+      this.addToAnnotationStorage(editor);
+    }
+  }
+  setActiveEditor(editor) {
+    if (this.#activeEditor === editor) {
+      return;
+    }
+    this.#activeEditor = editor;
+    if (editor) {
+      this.#dispatchUpdateUI(editor.propertiesToUpdate);
+    }
+  }
+  get #lastSelectedEditor() {
+    let ed = null;
+    for (ed of this.#selectedEditors) {}
+    return ed;
+  }
+  updateUI(editor) {
+    if (this.#lastSelectedEditor === editor) {
+      this.#dispatchUpdateUI(editor.propertiesToUpdate);
+    }
+  }
+  updateUIForDefaultProperties(editorType) {
+    this.#dispatchUpdateUI(editorType.defaultPropertiesToUpdate);
+  }
+  toggleSelected(editor) {
+    if (this.#selectedEditors.has(editor)) {
+      this.#selectedEditors.delete(editor);
+      editor.unselect();
+      this.#dispatchUpdateStates({
+        hasSelectedEditor: this.hasSelection
+      });
+      return;
+    }
+    this.#selectedEditors.add(editor);
+    editor.select();
+    this.#dispatchUpdateUI(editor.propertiesToUpdate);
+    this.#dispatchUpdateStates({
+      hasSelectedEditor: true
+    });
+  }
+  setSelected(editor) {
+    this.updateToolbar({
+      mode: editor.mode,
+      editId: editor.uid
+    });
+    this.#currentDrawingSession?.commitOrRemove();
+    for (const ed of this.#selectedEditors) {
+      if (ed !== editor) {
+        ed.unselect();
+      }
+    }
+    this.#commentManager?.destroyPopup();
+    this.#selectedEditors.clear();
+    this.#selectedEditors.add(editor);
+    editor.select();
+    this.#dispatchUpdateUI(editor.propertiesToUpdate);
+    this.#dispatchUpdateStates({
+      hasSelectedEditor: true
+    });
+  }
+  get firstSelectedEditor() {
+    return this.#selectedEditors.values().next().value;
+  }
+  unselect(editor) {
+    editor.unselect();
+    this.#selectedEditors.delete(editor);
+    this.#dispatchUpdateStates({
+      hasSelectedEditor: this.hasSelection
+    });
+  }
+  get hasSelection() {
+    return this.#selectedEditors.size !== 0;
+  }
+  get isEnterHandled() {
+    return this.#selectedEditors.size === 1 && this.firstSelectedEditor.isEnterHandled;
+  }
+  undo() {
+    this.#commandManager.undo();
+    this.#dispatchUpdateStates({
+      hasSomethingToUndo: this.#commandManager.hasSomethingToUndo(),
+      hasSomethingToRedo: true,
+      isEmpty: this.#isEmpty()
+    });
+    this._editorUndoBar?.hide();
+  }
+  redo() {
+    this.#commandManager.redo();
+    this.#dispatchUpdateStates({
+      hasSomethingToUndo: true,
+      hasSomethingToRedo: this.#commandManager.hasSomethingToRedo(),
+      isEmpty: this.#isEmpty()
+    });
+  }
+  addCommands(params) {
+    this.#commandManager.add(params);
+    this.#dispatchUpdateStates({
+      hasSomethingToUndo: true,
+      hasSomethingToRedo: false,
+      isEmpty: this.#isEmpty()
+    });
+  }
+  cleanUndoStack(type) {
+    this.#commandManager.cleanType(type);
+  }
+  #isEmpty() {
+    if (this.#allEditors.size === 0) {
+      return true;
+    }
+    if (this.#allEditors.size === 1) {
+      for (const editor of this.#allEditors.values()) {
+        return editor.isEmpty();
+      }
+    }
+    return false;
+  }
+  delete() {
+    this.commitOrRemove();
+    const drawingEditor = this.currentLayer?.endDrawingSession(true);
+    if (!this.hasSelection && !drawingEditor) {
+      return;
+    }
+    const editors = drawingEditor ? [drawingEditor] : [...this.#selectedEditors];
+    const cmd = () => {
+      this._editorUndoBar?.show(undo, editors.length === 1 ? editors[0].editorType : editors.length);
+      for (const editor of editors) {
+        editor.remove();
+      }
+    };
+    const undo = () => {
+      for (const editor of editors) {
+        this.#addEditorToLayer(editor);
+      }
+    };
+    this.addCommands({
+      cmd,
+      undo,
+      mustExec: true
+    });
+  }
+  commitOrRemove() {
+    this.#activeEditor?.commitOrRemove();
+  }
+  hasSomethingToControl() {
+    return this.#activeEditor || this.hasSelection;
+  }
+  #selectEditors(editors) {
+    for (const editor of this.#selectedEditors) {
+      editor.unselect();
+    }
+    this.#selectedEditors.clear();
+    for (const editor of editors) {
+      if (editor.isEmpty()) {
+        continue;
+      }
+      this.#selectedEditors.add(editor);
+      editor.select();
+    }
+    this.#dispatchUpdateStates({
+      hasSelectedEditor: this.hasSelection
+    });
+  }
+  selectAll() {
+    for (const editor of this.#selectedEditors) {
+      editor.commit();
+    }
+    this.#selectEditors(this.#allEditors.values());
+  }
+  unselectAll() {
+    if (this.#activeEditor) {
+      this.#activeEditor.commitOrRemove();
+      if (this.#mode !== AnnotationEditorType.NONE) {
+        return;
+      }
+    }
+    if (this.#currentDrawingSession?.commitOrRemove()) {
+      return;
+    }
+    this.#commentManager?.destroyPopup();
+    if (!this.hasSelection) {
+      return;
+    }
+    for (const editor of this.#selectedEditors) {
+      editor.unselect();
+    }
+    this.#selectedEditors.clear();
+    this.#dispatchUpdateStates({
+      hasSelectedEditor: false
+    });
+  }
+  translateSelectedEditors(x, y, noCommit = false) {
+    if (!noCommit) {
+      this.commitOrRemove();
+    }
+    if (!this.hasSelection) {
+      return;
+    }
+    this.#translation[0] += x;
+    this.#translation[1] += y;
+    const [totalX, totalY] = this.#translation;
+    const editors = [...this.#selectedEditors];
+    const TIME_TO_WAIT = 1000;
+    if (this.#translationTimeoutId) {
+      clearTimeout(this.#translationTimeoutId);
+    }
+    this.#translationTimeoutId = setTimeout(() => {
+      this.#translationTimeoutId = null;
+      this.#translation[0] = this.#translation[1] = 0;
+      this.addCommands({
+        cmd: () => {
+          for (const editor of editors) {
+            if (this.#allEditors.has(editor.id)) {
+              editor.translateInPage(totalX, totalY);
+              editor.translationDone();
+            }
+          }
+        },
+        undo: () => {
+          for (const editor of editors) {
+            if (this.#allEditors.has(editor.id)) {
+              editor.translateInPage(-totalX, -totalY);
+              editor.translationDone();
+            }
+          }
+        },
+        mustExec: false
+      });
+    }, TIME_TO_WAIT);
+    for (const editor of editors) {
+      editor.translateInPage(x, y);
+      editor.translationDone();
+    }
+  }
+  setUpDragSession() {
+    if (!this.hasSelection) {
+      return;
+    }
+    this.disableUserSelect(true);
+    this.#draggingEditors = new Map();
+    for (const editor of this.#selectedEditors) {
+      this.#draggingEditors.set(editor, {
+        savedX: editor.x,
+        savedY: editor.y,
+        savedPageIndex: editor.pageIndex,
+        newX: 0,
+        newY: 0,
+        newPageIndex: -1
+      });
+    }
+  }
+  endDragSession() {
+    if (!this.#draggingEditors) {
+      return false;
+    }
+    this.disableUserSelect(false);
+    const map = this.#draggingEditors;
+    this.#draggingEditors = null;
+    let mustBeAddedInUndoStack = false;
+    for (const [{
+      x,
+      y,
+      pageIndex
+    }, value] of map) {
+      value.newX = x;
+      value.newY = y;
+      value.newPageIndex = pageIndex;
+      mustBeAddedInUndoStack ||= x !== value.savedX || y !== value.savedY || pageIndex !== value.savedPageIndex;
+    }
+    if (!mustBeAddedInUndoStack) {
+      return false;
+    }
+    const move = (editor, x, y, pageIndex) => {
+      if (this.#allEditors.has(editor.id)) {
+        const parent = this.#allLayers.get(pageIndex);
+        if (parent) {
+          editor._setParentAndPosition(parent, x, y);
+        } else {
+          editor.pageIndex = pageIndex;
+          editor.x = x;
+          editor.y = y;
+        }
+      }
+    };
+    this.addCommands({
+      cmd: () => {
+        for (const [editor, {
+          newX,
+          newY,
+          newPageIndex
+        }] of map) {
+          move(editor, newX, newY, newPageIndex);
+        }
+      },
+      undo: () => {
+        for (const [editor, {
+          savedX,
+          savedY,
+          savedPageIndex
+        }] of map) {
+          move(editor, savedX, savedY, savedPageIndex);
+        }
+      },
+      mustExec: true
+    });
+    return true;
+  }
+  dragSelectedEditors(tx, ty) {
+    if (!this.#draggingEditors) {
+      return;
+    }
+    for (const editor of this.#draggingEditors.keys()) {
+      editor.drag(tx, ty);
+    }
+  }
+  rebuild(editor) {
+    if (editor.parent === null) {
+      const parent = this.getLayer(editor.pageIndex);
+      if (parent) {
+        parent.changeParent(editor);
+        parent.addOrRebuild(editor);
+      } else {
+        this.addEditor(editor);
+        this.addToAnnotationStorage(editor);
+        editor.rebuild();
+      }
+    } else {
+      editor.parent.addOrRebuild(editor);
+    }
+  }
+  get isEditorHandlingKeyboard() {
+    return this.getActive()?.shouldGetKeyboardEvents() || this.#selectedEditors.size === 1 && this.firstSelectedEditor.shouldGetKeyboardEvents();
+  }
+  isActive(editor) {
+    return this.#activeEditor === editor;
+  }
+  getActive() {
+    return this.#activeEditor;
+  }
+  getMode() {
+    return this.#mode;
+  }
+  isEditingMode() {
+    return this.#mode !== AnnotationEditorType.NONE;
+  }
+  get imageManager() {
+    return util_shadow(this, "imageManager", new ImageManager());
+  }
+  getSelectionBoxes(textLayer) {
+    if (!textLayer) {
+      return null;
+    }
+    const selection = document.getSelection();
+    for (let i = 0, ii = selection.rangeCount; i < ii; i++) {
+      if (!textLayer.contains(selection.getRangeAt(i).commonAncestorContainer)) {
+        return null;
+      }
+    }
+    const {
+      x: layerX,
+      y: layerY,
+      width: parentWidth,
+      height: parentHeight
+    } = textLayer.getBoundingClientRect();
+    let rotator;
+    switch (textLayer.getAttribute("data-main-rotation")) {
+      case "90":
+        rotator = (x, y, w, h) => ({
+          x: (y - layerY) / parentHeight,
+          y: 1 - (x + w - layerX) / parentWidth,
+          width: h / parentHeight,
+          height: w / parentWidth
+        });
+        break;
+      case "180":
+        rotator = (x, y, w, h) => ({
+          x: 1 - (x + w - layerX) / parentWidth,
+          y: 1 - (y + h - layerY) / parentHeight,
+          width: w / parentWidth,
+          height: h / parentHeight
+        });
+        break;
+      case "270":
+        rotator = (x, y, w, h) => ({
+          x: 1 - (y + h - layerY) / parentHeight,
+          y: (x - layerX) / parentWidth,
+          width: h / parentHeight,
+          height: w / parentWidth
+        });
+        break;
+      default:
+        rotator = (x, y, w, h) => ({
+          x: (x - layerX) / parentWidth,
+          y: (y - layerY) / parentHeight,
+          width: w / parentWidth,
+          height: h / parentHeight
+        });
+        break;
+    }
+    const boxes = [];
+    for (let i = 0, ii = selection.rangeCount; i < ii; i++) {
+      const range = selection.getRangeAt(i);
+      if (range.collapsed) {
+        continue;
+      }
+      for (const {
+        x,
+        y,
+        width,
+        height
+      } of range.getClientRects()) {
+        if (width === 0 || height === 0) {
+          continue;
+        }
+        boxes.push(rotator(x, y, width, height));
+      }
+    }
+    return boxes.length === 0 ? null : boxes;
+  }
+  addChangedExistingAnnotation({
+    annotationElementId,
+    id
+  }) {
+    (this.#changedExistingAnnotations ||= new Map()).set(annotationElementId, id);
+  }
+  removeChangedExistingAnnotation({
+    annotationElementId
+  }) {
+    this.#changedExistingAnnotations?.delete(annotationElementId);
+  }
+  renderAnnotationElement(annotation) {
+    const editorId = this.#changedExistingAnnotations?.get(annotation.data.id);
+    if (!editorId) {
+      return;
+    }
+    const editor = this.#annotationStorage.getRawValue(editorId);
+    if (!editor) {
+      return;
+    }
+    if (this.#mode === AnnotationEditorType.NONE && !editor.hasBeenModified) {
+      return;
+    }
+    editor.renderAnnotationElement(annotation);
+  }
+  setMissingCanvas(annotationId, annotationElementId, canvas) {
+    const editor = this.#missingCanvases?.get(annotationId);
+    if (!editor) {
+      return;
+    }
+    editor.setCanvas(annotationElementId, canvas);
+    this.#missingCanvases.delete(annotationId);
+  }
+  addMissingCanvas(annotationId, editor) {
+    (this.#missingCanvases ||= new Map()).set(annotationId, editor);
+  }
+}
+
+;// ./src/display/editor/alt_text.js
+
+class AltText {
+  #altText = null;
+  #altTextDecorative = false;
+  #altTextButton = null;
+  #altTextButtonLabel = null;
+  #altTextTooltip = null;
+  #altTextTooltipTimeout = null;
+  #altTextWasFromKeyBoard = false;
+  #badge = null;
+  #editor = null;
+  #guessedText = null;
+  #textWithDisclaimer = null;
+  #useNewAltTextFlow = false;
+  static #l10nNewButton = null;
+  static _l10n = null;
+  constructor(editor) {
+    this.#editor = editor;
+    this.#useNewAltTextFlow = editor._uiManager.useNewAltTextFlow;
+    AltText.#l10nNewButton ||= Object.freeze({
+      added: "pdfjs-editor-new-alt-text-added-button",
+      "added-label": "pdfjs-editor-new-alt-text-added-button-label",
+      missing: "pdfjs-editor-new-alt-text-missing-button",
+      "missing-label": "pdfjs-editor-new-alt-text-missing-button-label",
+      review: "pdfjs-editor-new-alt-text-to-review-button",
+      "review-label": "pdfjs-editor-new-alt-text-to-review-button-label"
+    });
+  }
+  static initialize(l10n) {
+    AltText._l10n ??= l10n;
+  }
+  async render() {
+    const altText = this.#altTextButton = document.createElement("button");
+    altText.className = "altText";
+    altText.tabIndex = "0";
+    const label = this.#altTextButtonLabel = document.createElement("span");
+    altText.append(label);
+    if (this.#useNewAltTextFlow) {
+      altText.classList.add("new");
+      altText.setAttribute("data-l10n-id", AltText.#l10nNewButton.missing);
+      label.setAttribute("data-l10n-id", AltText.#l10nNewButton["missing-label"]);
+    } else {
+      altText.setAttribute("data-l10n-id", "pdfjs-editor-alt-text-button");
+      label.setAttribute("data-l10n-id", "pdfjs-editor-alt-text-button-label");
+    }
+    const signal = this.#editor._uiManager._signal;
+    altText.addEventListener("contextmenu", noContextMenu, {
+      signal
+    });
+    altText.addEventListener("pointerdown", event => event.stopPropagation(), {
+      signal
+    });
+    const onClick = event => {
+      event.preventDefault();
+      this.#editor._uiManager.editAltText(this.#editor);
+      if (this.#useNewAltTextFlow) {
+        this.#editor._reportTelemetry({
+          action: "pdfjs.image.alt_text.image_status_label_clicked",
+          data: {
+            label: this.#label
+          }
+        });
+      }
+    };
+    altText.addEventListener("click", onClick, {
+      capture: true,
+      signal
+    });
+    altText.addEventListener("keydown", event => {
+      if (event.target === altText && event.key === "Enter") {
+        this.#altTextWasFromKeyBoard = true;
+        onClick(event);
+      }
+    }, {
+      signal
+    });
+    await this.#setState();
+    return altText;
+  }
+  get #label() {
+    return this.#altText && "added" || this.#altText === null && this.guessedText && "review" || "missing";
+  }
+  finish() {
+    if (!this.#altTextButton) {
+      return;
+    }
+    this.#altTextButton.focus({
+      focusVisible: this.#altTextWasFromKeyBoard
+    });
+    this.#altTextWasFromKeyBoard = false;
+  }
+  isEmpty() {
+    return this.#useNewAltTextFlow ? this.#altText === null : !this.#altText && !this.#altTextDecorative;
+  }
+  hasData() {
+    return this.#useNewAltTextFlow ? this.#altText !== null || !!this.#guessedText : this.isEmpty();
+  }
+  get guessedText() {
+    return this.#guessedText;
+  }
+  async setGuessedText(guessedText) {
+    if (this.#altText !== null) {
+      return;
+    }
+    this.#guessedText = guessedText;
+    this.#textWithDisclaimer = await AltText._l10n.get("pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer", {
+      generatedAltText: guessedText
+    });
+    this.#setState();
+  }
+  toggleAltTextBadge(visibility = false) {
+    if (!this.#useNewAltTextFlow || this.#altText) {
+      this.#badge?.remove();
+      this.#badge = null;
+      return;
+    }
+    if (!this.#badge) {
+      const badge = this.#badge = document.createElement("div");
+      badge.className = "noAltTextBadge";
+      this.#editor.div.append(badge);
+    }
+    this.#badge.classList.toggle("hidden", !visibility);
+  }
+  serialize(isForCopying) {
+    let altText = this.#altText;
+    if (!isForCopying && this.#guessedText === altText) {
+      altText = this.#textWithDisclaimer;
+    }
+    return {
+      altText,
+      decorative: this.#altTextDecorative,
+      guessedText: this.#guessedText,
+      textWithDisclaimer: this.#textWithDisclaimer
+    };
+  }
+  get data() {
+    return {
+      altText: this.#altText,
+      decorative: this.#altTextDecorative
+    };
+  }
+  set data({
+    altText,
+    decorative,
+    guessedText,
+    textWithDisclaimer,
+    cancel = false
+  }) {
+    if (guessedText) {
+      this.#guessedText = guessedText;
+      this.#textWithDisclaimer = textWithDisclaimer;
+    }
+    if (this.#altText === altText && this.#altTextDecorative === decorative) {
+      return;
+    }
+    if (!cancel) {
+      this.#altText = altText;
+      this.#altTextDecorative = decorative;
+    }
+    this.#setState();
+  }
+  toggle(enabled = false) {
+    if (!this.#altTextButton) {
+      return;
+    }
+    if (!enabled && this.#altTextTooltipTimeout) {
+      clearTimeout(this.#altTextTooltipTimeout);
+      this.#altTextTooltipTimeout = null;
+    }
+    this.#altTextButton.disabled = !enabled;
+  }
+  shown() {
+    this.#editor._reportTelemetry({
+      action: "pdfjs.image.alt_text.image_status_label_displayed",
+      data: {
+        label: this.#label
+      }
+    });
+  }
+  destroy() {
+    this.#altTextButton?.remove();
+    this.#altTextButton = null;
+    this.#altTextButtonLabel = null;
+    this.#altTextTooltip = null;
+    this.#badge?.remove();
+    this.#badge = null;
+  }
+  async #setState() {
+    const button = this.#altTextButton;
+    if (!button) {
+      return;
+    }
+    if (this.#useNewAltTextFlow) {
+      button.classList.toggle("done", !!this.#altText);
+      button.setAttribute("data-l10n-id", AltText.#l10nNewButton[this.#label]);
+      this.#altTextButtonLabel?.setAttribute("data-l10n-id", AltText.#l10nNewButton[`${this.#label}-label`]);
+      if (!this.#altText) {
+        this.#altTextTooltip?.remove();
+        return;
+      }
+    } else {
+      if (!this.#altText && !this.#altTextDecorative) {
+        button.classList.remove("done");
+        this.#altTextTooltip?.remove();
+        return;
+      }
+      button.classList.add("done");
+      button.setAttribute("data-l10n-id", "pdfjs-editor-alt-text-edit-button");
+    }
+    let tooltip = this.#altTextTooltip;
+    if (!tooltip) {
+      this.#altTextTooltip = tooltip = document.createElement("span");
+      tooltip.className = "tooltip";
+      tooltip.setAttribute("role", "tooltip");
+      tooltip.id = `alt-text-tooltip-${this.#editor.id}`;
+      const DELAY_TO_SHOW_TOOLTIP = 100;
+      const signal = this.#editor._uiManager._signal;
+      signal.addEventListener("abort", () => {
+        clearTimeout(this.#altTextTooltipTimeout);
+        this.#altTextTooltipTimeout = null;
+      }, {
+        once: true
+      });
+      button.addEventListener("mouseenter", () => {
+        this.#altTextTooltipTimeout = setTimeout(() => {
+          this.#altTextTooltipTimeout = null;
+          this.#altTextTooltip.classList.add("show");
+          this.#editor._reportTelemetry({
+            action: "alt_text_tooltip"
+          });
+        }, DELAY_TO_SHOW_TOOLTIP);

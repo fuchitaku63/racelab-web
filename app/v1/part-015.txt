@@ -1,0 +1,1000 @@
+    let firstPosition = 0;
+    for (const div of children) {
+      if (div === first) {
+        break;
+      }
+      firstPosition++;
+    }
+    const nextFirstPosition = (360 - this.rotation + this.parentRotation) % 360 / 90 * (this.#allResizerDivs.length / 4);
+    if (nextFirstPosition !== firstPosition) {
+      if (nextFirstPosition < firstPosition) {
+        for (let i = 0; i < firstPosition - nextFirstPosition; i++) {
+          this.#resizersDiv.append(this.#resizersDiv.firstElementChild);
+        }
+      } else if (nextFirstPosition > firstPosition) {
+        for (let i = 0; i < nextFirstPosition - firstPosition; i++) {
+          this.#resizersDiv.firstElementChild.before(this.#resizersDiv.lastElementChild);
+        }
+      }
+      let i = 0;
+      for (const child of children) {
+        const div = this.#allResizerDivs[i++];
+        const name = div.getAttribute("data-resizer-name");
+        child.setAttribute("data-l10n-id", AnnotationEditor._l10nResizer[name]);
+      }
+    }
+    this.#setResizerTabIndex(0);
+    this.#isResizerEnabledForKeyboard = true;
+    this.#resizersDiv.firstElementChild.focus({
+      focusVisible: true
+    });
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+  #resizerKeydown(event) {
+    AnnotationEditor._resizerKeyboardManager.exec(this, event);
+  }
+  #resizerBlur(event) {
+    if (this.#isResizerEnabledForKeyboard && event.relatedTarget?.parentNode !== this.#resizersDiv) {
+      this.#stopResizing();
+    }
+  }
+  #resizerFocus(name) {
+    this.#focusedResizerName = this.#isResizerEnabledForKeyboard ? name : "";
+  }
+  #setResizerTabIndex(value) {
+    if (!this.#allResizerDivs) {
+      return;
+    }
+    for (const div of this.#allResizerDivs) {
+      div.tabIndex = value;
+    }
+  }
+  _resizeWithKeyboard(x, y) {
+    if (!this.#isResizerEnabledForKeyboard) {
+      return;
+    }
+    this.#resizerPointermove(this.#focusedResizerName, {
+      deltaX: x,
+      deltaY: y,
+      fromKeyboard: true
+    });
+  }
+  #stopResizing() {
+    this.#isResizerEnabledForKeyboard = false;
+    this.#setResizerTabIndex(-1);
+    this.#addResizeToUndoStack();
+  }
+  _stopResizingWithKeyboard() {
+    this.#stopResizing();
+    this.div.focus();
+  }
+  select() {
+    if (this.isSelected && this._editToolbar) {
+      this._editToolbar.show();
+      return;
+    }
+    this.isSelected = true;
+    this.makeResizable();
+    this.div?.classList.add("selectedEditor");
+    if (!this._editToolbar) {
+      this.addEditToolbar().then(() => {
+        if (this.div?.classList.contains("selectedEditor")) {
+          this._editToolbar?.show();
+        }
+      });
+      return;
+    }
+    this._editToolbar?.show();
+    this.#altText?.toggleAltTextBadge(false);
+  }
+  focus() {
+    if (this.div && !this.div.contains(document.activeElement)) {
+      setTimeout(() => this.div?.focus({
+        preventScroll: true
+      }), 0);
+    }
+  }
+  unselect() {
+    if (!this.isSelected) {
+      return;
+    }
+    this.isSelected = false;
+    this.#resizersDiv?.classList.add("hidden");
+    this.div?.classList.remove("selectedEditor");
+    if (this.div?.contains(document.activeElement)) {
+      this._uiManager.currentLayer.div.focus({
+        preventScroll: true
+      });
+    }
+    this._editToolbar?.hide();
+    this.#altText?.toggleAltTextBadge(true);
+    this.hideCommentPopup();
+  }
+  hideCommentPopup() {
+    if (this.hasComment) {
+      this._uiManager.toggleComment(null);
+    }
+  }
+  updateParams(type, value) {}
+  disableEditing() {}
+  enableEditing() {}
+  get canChangeContent() {
+    return false;
+  }
+  enterInEditMode() {
+    if (!this.canChangeContent) {
+      return;
+    }
+    this.enableEditMode();
+    this.div.focus();
+  }
+  dblclick(event) {
+    if (event.target.nodeName === "BUTTON") {
+      return;
+    }
+    this.enterInEditMode();
+    this.parent.updateToolbar({
+      mode: this.constructor._editorType,
+      editId: this.uid
+    });
+  }
+  getElementForAltText() {
+    return this.div;
+  }
+  get contentDiv() {
+    return this.div;
+  }
+  get isEditing() {
+    return this.#isEditing;
+  }
+  set isEditing(value) {
+    this.#isEditing = value;
+    if (!this.parent) {
+      return;
+    }
+    if (value) {
+      this.parent.setSelected(this);
+      this.parent.setActiveEditor(this);
+    } else {
+      this.parent.setActiveEditor(null);
+    }
+  }
+  static get MIN_SIZE() {
+    return 16;
+  }
+  static canCreateNewEmptyEditor() {
+    return true;
+  }
+  get telemetryInitialData() {
+    return {
+      action: "added"
+    };
+  }
+  get telemetryFinalData() {
+    return null;
+  }
+  _reportTelemetry(data, mustWait = false) {
+    if (mustWait) {
+      this.#telemetryTimeouts ||= new Map();
+      const {
+        action
+      } = data;
+      let timeout = this.#telemetryTimeouts.get(action);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      timeout = setTimeout(() => {
+        this._reportTelemetry(data);
+        this.#telemetryTimeouts.delete(action);
+        if (this.#telemetryTimeouts.size === 0) {
+          this.#telemetryTimeouts = null;
+        }
+      }, AnnotationEditor._telemetryTimeout);
+      this.#telemetryTimeouts.set(action, timeout);
+      return;
+    }
+    data.type ||= this.editorType;
+    this._uiManager._eventBus.dispatch("reporttelemetry", {
+      source: this,
+      details: {
+        type: "editing",
+        data
+      }
+    });
+  }
+  show(visible = this._isVisible) {
+    this.div.classList.toggle("hidden", !visible);
+    this._isVisible = visible;
+  }
+  enable() {
+    if (this.div) {
+      this.div.tabIndex = 0;
+    }
+    this.#disabled = false;
+  }
+  disable() {
+    if (this.div) {
+      this.div.tabIndex = -1;
+    }
+    this.#disabled = true;
+  }
+  updateFakeAnnotationElement(annotationLayer) {
+    if (!this.#fakeAnnotation && !this.deleted) {
+      this.#fakeAnnotation = annotationLayer.addFakeAnnotation(this);
+      return;
+    }
+    if (this.deleted) {
+      this.#fakeAnnotation.remove();
+      this.#fakeAnnotation = null;
+      return;
+    }
+    if (this.hasEditedComment || this._hasBeenMoved || this._hasBeenResized) {
+      this.#fakeAnnotation.updateEdited({
+        rect: this.getPDFRect(),
+        popup: this.comment
+      });
+    }
+  }
+  renderAnnotationElement(annotation) {
+    if (this.deleted) {
+      annotation.hide();
+      return null;
+    }
+    let content = annotation.container.querySelector(".annotationContent");
+    if (!content) {
+      content = document.createElement("div");
+      content.classList.add("annotationContent", this.editorType);
+      annotation.container.prepend(content);
+    } else if (content.nodeName === "CANVAS") {
+      const canvas = content;
+      content = document.createElement("div");
+      content.classList.add("annotationContent", this.editorType);
+      canvas.before(content);
+    }
+    return content;
+  }
+  resetAnnotationElement(annotation) {
+    const {
+      firstElementChild
+    } = annotation.container;
+    if (firstElementChild?.nodeName === "DIV" && firstElementChild.classList.contains("annotationContent")) {
+      firstElementChild.remove();
+    }
+  }
+}
+class FakeEditor extends AnnotationEditor {
+  constructor(params) {
+    super(params);
+    this.annotationElementId = params.annotationElementId;
+    this.deleted = true;
+  }
+  serialize() {
+    return this.serializeDeleted();
+  }
+}
+
+;// ./src/shared/murmurhash3.js
+
+
+
+
+
+const SEED = 0xc3d2e1f0;
+const MASK_HIGH = 0xffff0000;
+const MASK_LOW = 0xffff;
+class MurmurHash3_64 {
+  constructor(seed) {
+    this.h1 = seed ? seed & 0xffffffff : SEED;
+    this.h2 = seed ? seed & 0xffffffff : SEED;
+  }
+  update(input) {
+    let data, length;
+    if (typeof input === "string") {
+      data = new Uint8Array(input.length * 2);
+      length = 0;
+      for (let i = 0, ii = input.length; i < ii; i++) {
+        const code = input.charCodeAt(i);
+        if (code <= 0xff) {
+          data[length++] = code;
+        } else {
+          data[length++] = code >>> 8;
+          data[length++] = code & 0xff;
+        }
+      }
+    } else if (ArrayBuffer.isView(input)) {
+      data = input.slice();
+      length = data.byteLength;
+    } else {
+      throw new Error("Invalid data format, must be a string or TypedArray.");
+    }
+    const blockCounts = length >> 2;
+    const tailLength = length - blockCounts * 4;
+    const dataUint32 = new Uint32Array(data.buffer, 0, blockCounts);
+    let k1 = 0,
+      k2 = 0;
+    let h1 = this.h1,
+      h2 = this.h2;
+    const C1 = 0xcc9e2d51,
+      C2 = 0x1b873593;
+    const C1_LOW = C1 & MASK_LOW,
+      C2_LOW = C2 & MASK_LOW;
+    for (let i = 0; i < blockCounts; i++) {
+      if (i & 1) {
+        k1 = dataUint32[i];
+        k1 = k1 * C1 & MASK_HIGH | k1 * C1_LOW & MASK_LOW;
+        k1 = k1 << 15 | k1 >>> 17;
+        k1 = k1 * C2 & MASK_HIGH | k1 * C2_LOW & MASK_LOW;
+        h1 ^= k1;
+        h1 = h1 << 13 | h1 >>> 19;
+        h1 = h1 * 5 + 0xe6546b64;
+      } else {
+        k2 = dataUint32[i];
+        k2 = k2 * C1 & MASK_HIGH | k2 * C1_LOW & MASK_LOW;
+        k2 = k2 << 15 | k2 >>> 17;
+        k2 = k2 * C2 & MASK_HIGH | k2 * C2_LOW & MASK_LOW;
+        h2 ^= k2;
+        h2 = h2 << 13 | h2 >>> 19;
+        h2 = h2 * 5 + 0xe6546b64;
+      }
+    }
+    k1 = 0;
+    switch (tailLength) {
+      case 3:
+        k1 ^= data[blockCounts * 4 + 2] << 16;
+      case 2:
+        k1 ^= data[blockCounts * 4 + 1] << 8;
+      case 1:
+        k1 ^= data[blockCounts * 4];
+        k1 = k1 * C1 & MASK_HIGH | k1 * C1_LOW & MASK_LOW;
+        k1 = k1 << 15 | k1 >>> 17;
+        k1 = k1 * C2 & MASK_HIGH | k1 * C2_LOW & MASK_LOW;
+        if (blockCounts & 1) {
+          h1 ^= k1;
+        } else {
+          h2 ^= k1;
+        }
+    }
+    this.h1 = h1;
+    this.h2 = h2;
+  }
+  hexdigest() {
+    let h1 = this.h1,
+      h2 = this.h2;
+    h1 ^= h2 >>> 1;
+    h1 = h1 * 0xed558ccd & MASK_HIGH | h1 * 0x8ccd & MASK_LOW;
+    h2 = h2 * 0xff51afd7 & MASK_HIGH | ((h2 << 16 | h1 >>> 16) * 0xafd7ed55 & MASK_HIGH) >>> 16;
+    h1 ^= h2 >>> 1;
+    h1 = h1 * 0x1a85ec53 & MASK_HIGH | h1 * 0xec53 & MASK_LOW;
+    h2 = h2 * 0xc4ceb9fe & MASK_HIGH | ((h2 << 16 | h1 >>> 16) * 0xb9fe1a85 & MASK_HIGH) >>> 16;
+    h1 ^= h2 >>> 1;
+    return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+  }
+}
+
+;// ./src/display/annotation_storage.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const SerializableEmpty = Object.freeze({
+  map: null,
+  hash: "",
+  transfer: undefined
+});
+class AnnotationStorage {
+  #modified = false;
+  #modifiedIds = null;
+  #editorsMap = null;
+  #storage = new Map();
+  onSetModified = null;
+  onResetModified = null;
+  onAnnotationEditor = null;
+  getValue(key, defaultValue) {
+    const value = this.#storage.get(key);
+    return value === undefined ? defaultValue : Object.assign(defaultValue, value);
+  }
+  getRawValue(key) {
+    return this.#storage.get(key);
+  }
+  remove(key) {
+    const storedValue = this.#storage.get(key);
+    if (storedValue === undefined) {
+      return;
+    }
+    if (storedValue instanceof AnnotationEditor) {
+      this.#editorsMap.delete(storedValue.annotationElementId);
+    }
+    this.#storage.delete(key);
+    if (this.#storage.size === 0) {
+      this.resetModified();
+    }
+    if (this.#storage.values().some(v => v instanceof AnnotationEditor)) {
+      return;
+    }
+    this.onAnnotationEditor?.(null);
+  }
+  setValue(key, value) {
+    const obj = this.#storage.get(key);
+    let modified = false;
+    if (obj !== undefined) {
+      for (const [entry, val] of Object.entries(value)) {
+        if (obj[entry] !== val) {
+          modified = true;
+          obj[entry] = val;
+        }
+      }
+    } else {
+      modified = true;
+      this.#storage.set(key, value);
+    }
+    if (modified) {
+      this.#setModified();
+    }
+    if (value instanceof AnnotationEditor) {
+      (this.#editorsMap ||= new Map()).set(value.annotationElementId, value);
+      this.onAnnotationEditor?.(value.constructor._type);
+    }
+  }
+  has(key) {
+    return this.#storage.has(key);
+  }
+  get size() {
+    return this.#storage.size;
+  }
+  #setModified() {
+    if (!this.#modified) {
+      this.#modified = true;
+      this.onSetModified?.();
+    }
+  }
+  resetModified() {
+    if (this.#modified) {
+      this.#modified = false;
+      this.onResetModified?.();
+    }
+  }
+  get print() {
+    return new PrintAnnotationStorage(this);
+  }
+  get serializable() {
+    if (this.#storage.size === 0) {
+      return SerializableEmpty;
+    }
+    const map = new Map(),
+      hash = new MurmurHash3_64(),
+      transfer = [];
+    const context = Object.create(null);
+    let hasBitmap = false;
+    for (const [key, val] of this.#storage) {
+      const serialized = val instanceof AnnotationEditor ? val.serialize(false, context) : val;
+      if (val.page) {
+        val.pageIndex = val.page._pageIndex;
+        delete val.page;
+      }
+      if (serialized) {
+        map.set(key, serialized);
+        hash.update(`${key}:${JSON.stringify(serialized)}`);
+        hasBitmap ||= !!serialized.bitmap;
+      }
+    }
+    if (hasBitmap) {
+      for (const value of map.values()) {
+        if (value.bitmap) {
+          transfer.push(value.bitmap);
+        }
+      }
+    }
+    return map.size > 0 ? {
+      map,
+      hash: hash.hexdigest(),
+      transfer
+    } : SerializableEmpty;
+  }
+  get editorStats() {
+    let stats = null;
+    const typeToEditor = new Map();
+    let numberOfEditedComments = 0;
+    let numberOfDeletedComments = 0;
+    for (const value of this.#storage.values()) {
+      if (!(value instanceof AnnotationEditor)) {
+        if (value.popup) {
+          if (value.popup.deleted) {
+            numberOfDeletedComments += 1;
+          } else {
+            numberOfEditedComments += 1;
+          }
+        }
+        continue;
+      }
+      if (value.isCommentDeleted) {
+        numberOfDeletedComments += 1;
+      } else if (value.hasEditedComment) {
+        numberOfEditedComments += 1;
+      }
+      const editorStats = value.telemetryFinalData;
+      if (!editorStats) {
+        continue;
+      }
+      const {
+        type
+      } = editorStats;
+      typeToEditor.getOrInsertComputed(type, () => Object.getPrototypeOf(value).constructor);
+      stats ||= Object.create(null);
+      const map = stats[type] ||= new Map();
+      for (const [key, val] of Object.entries(editorStats)) {
+        if (key === "type") {
+          continue;
+        }
+        const counters = map.getOrInsertComputed(key, makeMap);
+        counters.set(val, (counters.get(val) ?? 0) + 1);
+      }
+    }
+    if (numberOfDeletedComments > 0 || numberOfEditedComments > 0) {
+      stats ||= Object.create(null);
+      stats.comments = {
+        deleted: numberOfDeletedComments,
+        edited: numberOfEditedComments
+      };
+    }
+    if (!stats) {
+      return null;
+    }
+    for (const [type, editor] of typeToEditor) {
+      stats[type] = editor.computeTelemetryFinalData(stats[type]);
+    }
+    return stats;
+  }
+  resetModifiedIds() {
+    this.#modifiedIds = null;
+  }
+  updateEditor(annotationId, data) {
+    const value = this.#editorsMap?.get(annotationId);
+    if (value) {
+      value.updateFromAnnotationLayer(data);
+      return true;
+    }
+    return false;
+  }
+  getEditor(annotationId) {
+    return this.#editorsMap?.get(annotationId) || null;
+  }
+  get modifiedIds() {
+    if (this.#modifiedIds) {
+      return this.#modifiedIds;
+    }
+    const ids = [];
+    if (this.#editorsMap) {
+      for (const value of this.#editorsMap.values()) {
+        if (!value.serialize()) {
+          continue;
+        }
+        ids.push(value.annotationElementId);
+      }
+    }
+    let hash = "";
+    if (ids.length) {
+      const h = new MurmurHash3_64();
+      h.update(ids.join(","));
+      hash = h.hexdigest();
+    }
+    return this.#modifiedIds = {
+      ids: new Set(ids),
+      hash
+    };
+  }
+  [Symbol.iterator]() {
+    return this.#storage.entries();
+  }
+}
+class PrintAnnotationStorage extends AnnotationStorage {
+  #serializable = SerializableEmpty;
+  constructor(parent) {
+    super();
+    const {
+      serializable
+    } = parent;
+    if (serializable === SerializableEmpty) {
+      return;
+    }
+    const {
+      map,
+      hash,
+      transfer
+    } = serializable;
+    const clone = structuredClone(map, transfer ? {
+      transfer
+    } : null);
+    this.#serializable = {
+      map: clone,
+      hash,
+      transfer: []
+    };
+  }
+  get print() {
+    unreachable("Should not call PrintAnnotationStorage.print");
+  }
+  get serializable() {
+    return this.#serializable;
+  }
+  get modifiedIds() {
+    return util_shadow(this, "modifiedIds", {
+      ids: new Set(),
+      hash: ""
+    });
+  }
+}
+
+;// ./node_modules/core-js/modules/es.iterator.for-each.js
+es_iterator_for_each_namespaceFn();
+
+;// ./src/display/canvas_dependency_tracker.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const FORCED_DEPENDENCY_LABEL = "__forcedDependency";
+const {
+  floor: canvas_dependency_tracker_floor,
+  ceil
+} = Math;
+function expandBBox(array, index, minX, minY, maxX, maxY) {
+  array[index * 4 + 0] = Math.min(array[index * 4 + 0], minX);
+  array[index * 4 + 1] = Math.min(array[index * 4 + 1], minY);
+  array[index * 4 + 2] = Math.max(array[index * 4 + 2], maxX);
+  array[index * 4 + 3] = Math.max(array[index * 4 + 3], maxY);
+}
+function scaleCharBBox(scaleX, scaleY, x, y, bbox) {
+  let temp;
+  if (scaleX) {
+    if (scaleX < 0) {
+      temp = bbox[0];
+      bbox[0] = bbox[2];
+      bbox[2] = temp;
+    }
+    bbox[0] *= scaleX;
+    bbox[2] *= scaleX;
+    if (scaleY < 0) {
+      temp = bbox[1];
+      bbox[1] = bbox[3];
+      bbox[3] = temp;
+    }
+    bbox[1] *= scaleY;
+    bbox[3] *= scaleY;
+  } else {
+    bbox.fill(0);
+  }
+  bbox[0] += x;
+  bbox[1] += y;
+  bbox[2] += x;
+  bbox[3] += y;
+}
+const EMPTY_BBOX = new Uint32Array(new Uint8Array([255, 255, 0, 0]).buffer)[0];
+class BBoxReader {
+  #bboxes;
+  #coords;
+  constructor(bboxes, coords) {
+    this.#bboxes = bboxes;
+    this.#coords = coords;
+  }
+  get length() {
+    return this.#bboxes.length;
+  }
+  isEmpty(i) {
+    return this.#bboxes[i] === EMPTY_BBOX;
+  }
+  minX(i) {
+    return this.#coords[i * 4 + 0] / 256;
+  }
+  minY(i) {
+    return this.#coords[i * 4 + 1] / 256;
+  }
+  maxX(i) {
+    return (this.#coords[i * 4 + 2] + 1) / 256;
+  }
+  maxY(i) {
+    return (this.#coords[i * 4 + 3] + 1) / 256;
+  }
+}
+const ensureDebugMetadata = (map, key) => map?.getOrInsertComputed(key, () => ({
+  dependencies: new Set(),
+  isRenderingOperation: false
+}));
+class CanvasBBoxTracker {
+  #baseTransformStack = [[1, 0, 0, 1, 0, 0]];
+  #clipBox = [-Infinity, -Infinity, Infinity, Infinity];
+  #pendingBBox = new Float64Array(BBOX_INIT);
+  _pendingBBoxIdx = -1;
+  #canvasWidth;
+  #canvasHeight;
+  #bboxesCoords;
+  #bboxes;
+  _savesStack = [];
+  _markedContentStack = [];
+  constructor(canvas, operationsCount) {
+    this.#canvasWidth = canvas.width;
+    this.#canvasHeight = canvas.height;
+    this.#initializeBBoxes(operationsCount);
+  }
+  growOperationsCount(operationsCount) {
+    if (operationsCount >= this.#bboxes.length) {
+      this.#initializeBBoxes(operationsCount, this.#bboxes);
+    }
+  }
+  #initializeBBoxes(operationsCount, oldBBoxes) {
+    const buffer = new ArrayBuffer(operationsCount * 4);
+    this.#bboxesCoords = new Uint8ClampedArray(buffer);
+    this.#bboxes = new Uint32Array(buffer);
+    if (oldBBoxes && oldBBoxes.length > 0) {
+      this.#bboxes.set(oldBBoxes);
+      this.#bboxes.fill(EMPTY_BBOX, oldBBoxes.length);
+    } else {
+      this.#bboxes.fill(EMPTY_BBOX);
+    }
+  }
+  get clipBox() {
+    return this.#clipBox;
+  }
+  save(opIdx) {
+    this.#clipBox = {
+      __proto__: this.#clipBox
+    };
+    this._savesStack.push(opIdx);
+    return this;
+  }
+  restore(opIdx, onSavePopped) {
+    const previous = Object.getPrototypeOf(this.#clipBox);
+    if (previous === null) {
+      return this;
+    }
+    this.#clipBox = previous;
+    const lastSave = this._savesStack.pop();
+    if (lastSave !== undefined) {
+      onSavePopped?.(lastSave, opIdx);
+      this.#bboxes[opIdx] = this.#bboxes[lastSave];
+    }
+    return this;
+  }
+  recordOpenMarker(idx) {
+    this._savesStack.push(idx);
+    return this;
+  }
+  getOpenMarker() {
+    return this._savesStack.length === 0 ? null : this._savesStack.at(-1);
+  }
+  recordCloseMarker(opIdx, onSavePopped) {
+    const lastSave = this._savesStack.pop();
+    if (lastSave !== undefined) {
+      onSavePopped?.(lastSave, opIdx);
+      this.#bboxes[opIdx] = this.#bboxes[lastSave];
+    }
+    return this;
+  }
+  beginMarkedContent(opIdx) {
+    this._markedContentStack.push(opIdx);
+    return this;
+  }
+  endMarkedContent(opIdx, onSavePopped) {
+    const lastSave = this._markedContentStack.pop();
+    if (lastSave !== undefined) {
+      onSavePopped?.(lastSave, opIdx);
+      this.#bboxes[opIdx] = this.#bboxes[lastSave];
+    }
+    return this;
+  }
+  pushBaseTransform(ctx) {
+    this.#baseTransformStack.push(Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform()));
+    return this;
+  }
+  popBaseTransform() {
+    if (this.#baseTransformStack.length > 1) {
+      this.#baseTransformStack.pop();
+    }
+    return this;
+  }
+  resetBBox(idx) {
+    if (this._pendingBBoxIdx !== idx) {
+      this._pendingBBoxIdx = idx;
+      this.#pendingBBox.set(BBOX_INIT, 0);
+    }
+    return this;
+  }
+  recordClipBox(idx, ctx, minX, maxX, minY, maxY) {
+    const transform = Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform());
+    const clipBox = BBOX_INIT.slice();
+    Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, clipBox);
+    const intersection = Util.intersect(this.#clipBox, clipBox);
+    if (intersection) {
+      this.#clipBox[0] = intersection[0];
+      this.#clipBox[1] = intersection[1];
+      this.#clipBox[2] = intersection[2];
+      this.#clipBox[3] = intersection[3];
+    } else {
+      this.#clipBox[0] = this.#clipBox[1] = Infinity;
+      this.#clipBox[2] = this.#clipBox[3] = -Infinity;
+    }
+    return this;
+  }
+  recordBBox(idx, ctx, minX, maxX, minY, maxY) {
+    const clipBox = this.#clipBox;
+    if (clipBox[0] === Infinity) {
+      return this;
+    }
+    const transform = Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform());
+    if (clipBox[0] === -Infinity) {
+      Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, this.#pendingBBox);
+      return this;
+    }
+    const bbox = BBOX_INIT.slice();
+    Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, bbox);
+    this.#pendingBBox[0] = MathClamp(bbox[0], clipBox[0], this.#pendingBBox[0]);
+    this.#pendingBBox[1] = MathClamp(bbox[1], clipBox[1], this.#pendingBBox[1]);
+    this.#pendingBBox[2] = MathClamp(bbox[2], this.#pendingBBox[2], clipBox[2]);
+    this.#pendingBBox[3] = MathClamp(bbox[3], this.#pendingBBox[3], clipBox[3]);
+    return this;
+  }
+  recordFullPageBBox(idx) {
+    this.#pendingBBox[0] = Math.max(0, this.#clipBox[0]);
+    this.#pendingBBox[1] = Math.max(0, this.#clipBox[1]);
+    this.#pendingBBox[2] = Math.min(this.#canvasWidth, this.#clipBox[2]);
+    this.#pendingBBox[3] = Math.min(this.#canvasHeight, this.#clipBox[3]);
+    return this;
+  }
+  recordOperation(idx, preserve = false, dependencyLists) {
+    if (this._pendingBBoxIdx !== idx) {
+      return this;
+    }
+    const minX = canvas_dependency_tracker_floor(this.#pendingBBox[0] * 256 / this.#canvasWidth);
+    const minY = canvas_dependency_tracker_floor(this.#pendingBBox[1] * 256 / this.#canvasHeight);
+    const maxX = ceil(this.#pendingBBox[2] * 256 / this.#canvasWidth);
+    const maxY = ceil(this.#pendingBBox[3] * 256 / this.#canvasHeight);
+    expandBBox(this.#bboxesCoords, idx, minX, minY, maxX, maxY);
+    if (dependencyLists) {
+      for (const dependencies of dependencyLists) {
+        for (const depIdx of dependencies) {
+          if (depIdx !== idx) {
+            expandBBox(this.#bboxesCoords, depIdx, minX, minY, maxX, maxY);
+          }
+        }
+      }
+    }
+    if (!preserve) {
+      this._pendingBBoxIdx = -1;
+    }
+    return this;
+  }
+  bboxToClipBoxDropOperation(idx) {
+    if (this._pendingBBoxIdx === idx) {
+      this._pendingBBoxIdx = -1;
+      this.#clipBox[0] = Math.max(this.#clipBox[0], this.#pendingBBox[0]);
+      this.#clipBox[1] = Math.max(this.#clipBox[1], this.#pendingBBox[1]);
+      this.#clipBox[2] = Math.min(this.#clipBox[2], this.#pendingBBox[2]);
+      this.#clipBox[3] = Math.min(this.#clipBox[3], this.#pendingBBox[3]);
+    }
+    return this;
+  }
+  take() {
+    return new BBoxReader(this.#bboxes, this.#bboxesCoords);
+  }
+  takeDebugMetadata() {
+    throw new Error("Unreachable");
+  }
+  recordSimpleData(name, idx) {
+    return this;
+  }
+  recordIncrementalData(name, idx) {
+    return this;
+  }
+  resetIncrementalData(name, idx) {
+    return this;
+  }
+  recordNamedData(name, idx) {
+    return this;
+  }
+  recordSimpleDataFromNamed(name, depName, fallbackIdx) {
+    return this;
+  }
+  recordFutureForcedDependency(name, idx) {
+    return this;
+  }
+  inheritSimpleDataAsFutureForcedDependencies(names) {
+    return this;
+  }
+  inheritPendingDependenciesAsFutureForcedDependencies() {
+    return this;
+  }
+  recordCharacterBBox(idx, ctx, font, scale = 1, x = 0, y = 0, getMeasure) {
+    return this;
+  }
+  getSimpleIndex(dependencyName) {
+    return undefined;
+  }
+  recordDependencies(idx, dependencyNames) {
+    return this;
+  }
+  recordNamedDependency(idx, name) {
+    return this;
+  }
+  recordShowTextOperation(idx, preserve = false) {
+    return this;
+  }
+}
+class CanvasDependencyTracker {
+  #simple = {
+    __proto__: null
+  };
+  #incremental = {
+    __proto__: null,
+    transform: [],
+    moveText: [],
+    sameLineText: [],
+    [FORCED_DEPENDENCY_LABEL]: []
+  };
+  #namedDependencies = new Map();
+  #pendingDependencies = new Set();
+  #fontBBoxTrustworthy = new Map();
+  #debugMetadata;
+  #recordDebugMetadataDepenencyAfterRestore;
+  #bboxTracker;
+  constructor(bboxTracker, recordDebugMetadata = false) {
+    this.#bboxTracker = bboxTracker;
+    if (recordDebugMetadata) {
+      this.#debugMetadata = new Map();
+      this.#recordDebugMetadataDepenencyAfterRestore = (lastSave, opIdx) => {
+        ensureDebugMetadata(this.#debugMetadata, opIdx).dependencies.add(lastSave);
+      };
+    }
+  }
+  get clipBox() {
+    return this.#bboxTracker.clipBox;
+  }
+  growOperationsCount(operationsCount) {
+    this.#bboxTracker.growOperationsCount(operationsCount);
+  }
+  save(opIdx) {
+    this.#simple = {
+      __proto__: this.#simple
+    };
+    this.#incremental = {
+      __proto__: this.#incremental,
+      transform: {
+        __proto__: this.#incremental.transform
+      },
+      moveText: {
+        __proto__: this.#incremental.moveText
+      },
+      sameLineText: {
+        __proto__: this.#incremental.sameLineText
+      },
+      [FORCED_DEPENDENCY_LABEL]: {

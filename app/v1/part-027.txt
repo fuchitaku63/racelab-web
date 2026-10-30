@@ -1,0 +1,1000 @@
+  hide() {
+    if (this.container) {
+      this.container.hidden = true;
+    }
+    this.popup?.forceHide();
+  }
+  getElementsToTriggerPopup() {
+    return this.container;
+  }
+  addHighlightArea() {
+    const triggers = this.getElementsToTriggerPopup();
+    if (Array.isArray(triggers)) {
+      for (const element of triggers) {
+        element.classList.add("highlightArea");
+      }
+    } else {
+      triggers.classList.add("highlightArea");
+    }
+  }
+  _editOnDoubleClick() {
+    if (!this._isEditable) {
+      return;
+    }
+    const {
+      annotationEditorType: mode,
+      data: {
+        id: editId
+      }
+    } = this;
+    this.container.addEventListener("dblclick", () => {
+      this.linkService.eventBus?.dispatch("switchannotationeditormode", {
+        source: this,
+        mode,
+        editId,
+        mustEnterInEditMode: true
+      });
+    });
+  }
+  updateOC(optionalContentConfig) {
+    if (!this.data.oc || !optionalContentConfig) {
+      return;
+    }
+    const isVisible = optionalContentConfig.isVisible(this.data.oc);
+    if (isVisible) {
+      this.show();
+    } else {
+      this.hide();
+    }
+  }
+  get width() {
+    return this.data.rect[2] - this.data.rect[0];
+  }
+  get height() {
+    return this.data.rect[3] - this.data.rect[1];
+  }
+  _setBackgroundColor(element) {
+    const color = this.data.backgroundColor || null;
+    element.style.backgroundColor = color === null ? "transparent" : Util.makeHexColor(...color);
+  }
+}
+class EditorAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+    this.editor = parameters.editor;
+  }
+  render() {
+    this.container.className = "editorAnnotation";
+    return this.container;
+  }
+  createOrUpdatePopup() {
+    const {
+      editor
+    } = this;
+    if (!editor.hasComment) {
+      return;
+    }
+    this._createPopup(editor.comment);
+  }
+  get hasCommentButton() {
+    return this.enableComment && this.editor.hasComment;
+  }
+  get commentButtonPosition() {
+    return this.editor.commentButtonPositionInPage;
+  }
+  get commentText() {
+    return this.editor.comment.text;
+  }
+  set commentText(text) {
+    this.editor.comment = text;
+    if (!text) {
+      this.removePopup();
+    }
+  }
+  get commentData() {
+    return this.editor.getData();
+  }
+  remove() {
+    this.parent.removeAnnotation(this.data.id);
+    this.container.remove();
+    this.container = null;
+    this.removePopup();
+  }
+}
+class LinkAnnotationElement extends AnnotationElement {
+  constructor(parameters, options = null) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: !!options?.ignoreBorder,
+      createQuadrilaterals: true
+    });
+    this.isTooltipOnly = parameters.data.isTooltipOnly;
+  }
+  render() {
+    const {
+      data,
+      linkService
+    } = this;
+    const link = document.createElement("a");
+    link.setAttribute("data-element-id", data.id);
+    let isBound = false;
+    if (data.url) {
+      linkService.addLinkAttributes(link, data.url, data.newWindow);
+      isBound = true;
+    } else if (data.action) {
+      this._bindNamedAction(link, data.action, data.overlaidText);
+      isBound = true;
+    } else if (data.attachment) {
+      this.#bindAttachment(link, data.attachmentId, data.attachment, data.overlaidText, data.attachmentDest);
+      isBound = true;
+    } else if (data.setOCGState) {
+      this.#bindSetOCGState(link, data.setOCGState, data.overlaidText);
+      isBound = true;
+    } else if (data.dest) {
+      this._bindLink(link, data.dest, data.overlaidText);
+      isBound = true;
+    } else {
+      if (data.actions && (data.actions.has("Action") || data.actions.has("Mouse Up") || data.actions.has("Mouse Down")) && this.enableScripting && this.hasJSActions) {
+        this._bindJSAction(link, data);
+        isBound = true;
+      }
+      if (data.resetForm) {
+        this._bindResetFormAction(link, data.resetForm);
+        isBound = true;
+      } else if (this.isTooltipOnly && !isBound) {
+        this._bindLink(link, "");
+        isBound = true;
+      }
+    }
+    this.container.classList.add("linkAnnotation");
+    if (isBound) {
+      this.contentElement = link;
+      this.container.append(link);
+    }
+    return this.container;
+  }
+  #setInternalLink() {
+    this.container.setAttribute("data-internal-link", "");
+  }
+  _bindLink(link, destination, overlaidText = "") {
+    link.href = this.linkService.getDestinationHash(destination);
+    link.onclick = () => {
+      if (destination) {
+        this.linkService.goToDestination(destination);
+      }
+      return false;
+    };
+    if (destination || destination === "") {
+      this.#setInternalLink();
+    }
+    if (overlaidText) {
+      link.title = overlaidText;
+    }
+  }
+  _bindNamedAction(link, action, overlaidText = "") {
+    link.href = this.linkService.getAnchorUrl("");
+    link.onclick = () => {
+      this.linkService.executeNamedAction(action);
+      return false;
+    };
+    if (overlaidText) {
+      link.title = overlaidText;
+    }
+    this.#setInternalLink();
+  }
+  #bindAttachment(link, attachmentId, attachment, overlaidText = "", dest = null) {
+    link.href = this.linkService.getAnchorUrl("");
+    if (attachment.description) {
+      link.title = attachment.description;
+    } else if (overlaidText) {
+      link.title = overlaidText;
+    }
+    const openAttachment = async () => {
+      const content = await this.linkService.getAttachmentContent(attachmentId);
+      if (content) {
+        this.downloadManager?.openOrDownloadData(content, attachment.filename, dest);
+      }
+    };
+    link.onclick = () => {
+      openAttachment();
+      return false;
+    };
+    this.#setInternalLink();
+  }
+  #bindSetOCGState(link, action, overlaidText = "") {
+    link.href = this.linkService.getAnchorUrl("");
+    link.onclick = () => {
+      this.linkService.executeSetOCGState(action);
+      return false;
+    };
+    if (overlaidText) {
+      link.title = overlaidText;
+    }
+    this.#setInternalLink();
+  }
+  _bindJSAction(link, {
+    actions,
+    id,
+    overlaidText
+  }) {
+    link.href = this.linkService.getAnchorUrl("");
+    const map = new Map([["Action", "onclick"], ["Mouse Up", "onmouseup"], ["Mouse Down", "onmousedown"]]);
+    for (const name of actions.keys()) {
+      const jsName = map.get(name);
+      if (!jsName) {
+        continue;
+      }
+      link[jsName] = () => {
+        this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+          source: this,
+          detail: {
+            id,
+            name
+          }
+        });
+        return false;
+      };
+    }
+    if (overlaidText) {
+      link.title = overlaidText;
+    }
+    link.onclick ||= () => false;
+    this.#setInternalLink();
+  }
+  _bindResetFormAction(link, resetForm) {
+    const otherClickAction = link.onclick;
+    if (!otherClickAction) {
+      link.href = this.linkService.getAnchorUrl("");
+    }
+    this.#setInternalLink();
+    if (!this._fieldObjects) {
+      warn(`_bindResetFormAction - "resetForm" action not supported, ` + "ensure that the `fieldObjects` parameter is provided.");
+      if (!otherClickAction) {
+        link.onclick = () => false;
+      }
+      return;
+    }
+    link.onclick = () => {
+      otherClickAction?.();
+      const {
+        fields: resetFormFields,
+        refs: resetFormRefs,
+        include
+      } = resetForm;
+      const allFields = [];
+      if (resetFormFields.length !== 0 || resetFormRefs.length !== 0) {
+        const fieldIds = new Set(resetFormRefs);
+        for (const fieldName of resetFormFields) {
+          const fields = this._fieldObjects.get(fieldName) || [];
+          for (const {
+            id
+          } of fields) {
+            fieldIds.add(id);
+          }
+        }
+        const kidIdsById = new Map();
+        for (const fields of this._fieldObjects.values()) {
+          for (const {
+            id,
+            kidIds
+          } of fields) {
+            if (kidIds) {
+              kidIdsById.set(id, kidIds);
+            }
+          }
+        }
+        for (const id of fieldIds) {
+          for (const kidId of kidIdsById.get(id) || []) {
+            fieldIds.add(kidId);
+          }
+        }
+        for (const fields of this._fieldObjects.values()) {
+          for (const field of fields) {
+            if (fieldIds.has(field.id) === include) {
+              allFields.push(field);
+            }
+          }
+        }
+      } else {
+        for (const fields of this._fieldObjects.values()) {
+          allFields.push(...fields);
+        }
+      }
+      const storage = this.annotationStorage;
+      const allIds = [];
+      for (const field of allFields) {
+        const {
+          id
+        } = field;
+        allIds.push(id);
+        switch (field.type) {
+          case "text":
+            {
+              const value = field.defaultValue || "";
+              storage.setValue(id, {
+                value
+              });
+              break;
+            }
+          case "checkbox":
+          case "radiobutton":
+            {
+              const value = field.defaultValue === field.exportValues;
+              storage.setValue(id, {
+                value
+              });
+              break;
+            }
+          case "combobox":
+          case "listbox":
+            {
+              const value = field.defaultValue || "";
+              storage.setValue(id, {
+                value
+              });
+              break;
+            }
+          default:
+            continue;
+        }
+        const domElement = document.querySelector(`[data-element-id="${id}"]`);
+        if (!domElement) {
+          continue;
+        } else if (!GetElementsByNameSet.has(domElement)) {
+          warn(`_bindResetFormAction - element not allowed: ${id}`);
+          continue;
+        }
+        domElement.dispatchEvent(new Event("resetform"));
+      }
+      if (this.enableScripting) {
+        this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+          source: this,
+          detail: {
+            id: "app",
+            ids: allIds,
+            name: "ResetForm"
+          }
+        });
+      }
+      return false;
+    };
+  }
+}
+class TextAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true
+    });
+  }
+  render() {
+    this.container.classList.add("textAnnotation");
+    const image = document.createElement("img");
+    image.src = this.imageResourcesPath + "annotation-" + this.data.name.toLowerCase() + ".svg";
+    image.setAttribute("data-l10n-id", "pdfjs-text-annotation-type");
+    image.setAttribute("data-l10n-args", JSON.stringify({
+      type: this.data.name
+    }));
+    if (!this.data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this.container.append(image);
+    return this.container;
+  }
+}
+class WidgetAnnotationElement extends AnnotationElement {
+  render() {
+    return this.container;
+  }
+  _getKeyModifier(event) {
+    return FeatureTest.platform.isMac ? event.metaKey : event.ctrlKey;
+  }
+  _setEventListener(element, elementData, baseName, eventName, valueGetter) {
+    if (baseName.includes("mouse")) {
+      element.addEventListener(baseName, event => {
+        this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+          source: this,
+          detail: {
+            id: this.data.id,
+            name: eventName,
+            value: valueGetter(event),
+            shift: event.shiftKey,
+            modifier: this._getKeyModifier(event)
+          }
+        });
+      });
+    } else {
+      element.addEventListener(baseName, event => {
+        if (baseName === "blur") {
+          if (!elementData.focused || !event.relatedTarget) {
+            return;
+          }
+          elementData.focused = false;
+        } else if (baseName === "focus") {
+          if (elementData.focused) {
+            return;
+          }
+          elementData.focused = true;
+        }
+        if (!valueGetter) {
+          return;
+        }
+        this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+          source: this,
+          detail: {
+            id: this.data.id,
+            name: eventName,
+            value: valueGetter(event)
+          }
+        });
+      });
+    }
+  }
+  _setEventListeners(element, elementData, names, getter) {
+    const {
+      actions
+    } = this.data;
+    for (const [baseName, eventName] of names) {
+      if (eventName === "Action" || actions?.has(eventName)) {
+        if (eventName === "Focus" || eventName === "Blur") {
+          elementData ||= {
+            focused: false
+          };
+        }
+        this._setEventListener(element, elementData, baseName, eventName, getter);
+        if (eventName === "Focus" && !actions?.has("Blur")) {
+          this._setEventListener(element, elementData, "blur", "Blur", null);
+        } else if (eventName === "Blur" && !actions?.has("Focus")) {
+          this._setEventListener(element, elementData, "focus", "Focus", null);
+        }
+      }
+    }
+  }
+  _setTextStyle(element) {
+    const TEXT_ALIGNMENT = ["left", "center", "right"];
+    const {
+      fontColor
+    } = this.data.defaultAppearanceData;
+    const fontSize = this.data.defaultAppearanceData.fontSize || annotation_layer_DEFAULT_FONT_SIZE;
+    const style = element.style;
+    let computedFontSize;
+    const BORDER_SIZE = 2;
+    const roundToOneDecimal = x => Math.round(10 * x) / 10;
+    if (this.data.multiLine) {
+      const height = Math.abs(this.data.rect[3] - this.data.rect[1] - BORDER_SIZE);
+      const numberOfLines = Math.round(height / ((/* inlined export .LINE_FACTOR */1.35) * fontSize)) || 1;
+      const lineHeight = height / numberOfLines;
+      computedFontSize = Math.min(fontSize, roundToOneDecimal(lineHeight / (/* inlined export .LINE_FACTOR */1.35)));
+    } else {
+      const height = Math.abs(this.data.rect[3] - this.data.rect[1] - BORDER_SIZE);
+      computedFontSize = Math.min(fontSize, roundToOneDecimal(height / (/* inlined export .LINE_FACTOR */1.35)));
+    }
+    style.fontSize = `calc(${computedFontSize}px * var(--total-scale-factor))`;
+    style.color = Util.makeHexColor(...fontColor);
+    if (this.data.textAlignment !== null && !this.data.comb) {
+      style.textAlign = TEXT_ALIGNMENT[this.data.textAlignment];
+    }
+  }
+  _setRequired(element, isRequired) {
+    if (isRequired) {
+      element.setAttribute("required", true);
+    } else {
+      element.removeAttribute("required");
+    }
+    element.setAttribute("aria-required", isRequired);
+  }
+}
+class TextWidgetAnnotationElement extends WidgetAnnotationElement {
+  constructor(parameters) {
+    const isRenderable = parameters.renderForms || parameters.data.hasOwnCanvas || !parameters.data.hasAppearance && !!parameters.data.fieldValue;
+    super(parameters, {
+      isRenderable
+    });
+  }
+  setPropertyOnSiblings(base, key, value, keyInStorage) {
+    const storage = this.annotationStorage;
+    for (const element of this._getElementsByName(base.name, base.id)) {
+      if (element.domElement) {
+        element.domElement[key] = value;
+      }
+      storage.setValue(element.id, {
+        [keyInStorage]: value
+      });
+    }
+  }
+  render() {
+    const storage = this.annotationStorage;
+    const id = this.data.id;
+    this.container.classList.add("textWidgetAnnotation");
+    let element = null;
+    if (this.renderForms) {
+      const storedData = storage.getValue(id, {
+        value: this.data.fieldValue
+      });
+      let textContent = storedData.value || "";
+      const maxLen = storage.getValue(id, {
+        charLimit: this.data.maxLen
+      }).charLimit;
+      if (maxLen && textContent.length > maxLen) {
+        textContent = textContent.slice(0, maxLen);
+      }
+      let fieldFormattedValues = storedData.formattedValue || this.data.textContent?.join("\n") || null;
+      if (fieldFormattedValues && this.data.comb) {
+        fieldFormattedValues = fieldFormattedValues.replaceAll(/\s+/g, "");
+      }
+      const elementData = {
+        userValue: textContent,
+        formattedValue: fieldFormattedValues,
+        lastCommittedValue: null,
+        commitKey: 1,
+        focused: false
+      };
+      if (this.data.multiLine) {
+        element = document.createElement("textarea");
+        element.textContent = fieldFormattedValues ?? textContent;
+        if (this.data.doNotScroll) {
+          element.style.overflowY = "hidden";
+        }
+      } else {
+        element = document.createElement("input");
+        element.type = this.data.password ? "password" : "text";
+        element.setAttribute("value", fieldFormattedValues ?? textContent);
+        if (this.data.doNotScroll) {
+          element.style.overflowX = "hidden";
+        }
+      }
+      if (this.data.hasOwnCanvas) {
+        this.container.classList.add("hasOwnCanvas");
+        if (storage.has(id)) {
+          this.container.classList.add("sandboxModified");
+        }
+      }
+      GetElementsByNameSet.add(element);
+      this.contentElement = element;
+      element.setAttribute("data-element-id", id);
+      element.disabled = this.data.readOnly;
+      element.name = this.data.fieldName;
+      element.tabIndex = 0;
+      const {
+        datetimeFormat,
+        datetimeType,
+        timeStep
+      } = this.data;
+      const hasDateOrTime = !!datetimeType && this.enableScripting;
+      if (datetimeFormat) {
+        element.title = datetimeFormat;
+      }
+      this._setRequired(element, this.data.required);
+      if (maxLen) {
+        element.maxLength = maxLen;
+      }
+      element.addEventListener("input", event => {
+        storage.setValue(id, {
+          value: event.target.value
+        });
+        this.setPropertyOnSiblings(element, "value", event.target.value, "value");
+        elementData.formattedValue = null;
+      });
+      element.addEventListener("resetform", event => {
+        const defaultValue = this.data.defaultFieldValue ?? "";
+        element.value = elementData.userValue = defaultValue;
+        elementData.formattedValue = null;
+      });
+      let blurListener = event => {
+        const {
+          formattedValue
+        } = elementData;
+        if (formattedValue !== null && formattedValue !== undefined) {
+          event.target.value = formattedValue;
+        }
+        event.target.scrollLeft = 0;
+      };
+      if (this.enableScripting && this.hasJSActions) {
+        element.addEventListener("focus", event => {
+          if (elementData.focused) {
+            return;
+          }
+          const {
+            target
+          } = event;
+          if (hasDateOrTime) {
+            target.type = datetimeType;
+            if (timeStep) {
+              target.step = timeStep;
+            }
+          }
+          if (elementData.userValue) {
+            const value = elementData.userValue;
+            if (hasDateOrTime) {
+              if (datetimeType === "time") {
+                const date = new Date(value);
+                const parts = [date.getHours(), date.getMinutes(), date.getSeconds()];
+                target.value = parts.map(v => v.toString().padStart(2, "0")).join(":");
+              } else {
+                target.value = new Date(value - TIMEZONE_OFFSET).toISOString().split(datetimeType === "date" ? "T" : ".", 1)[0];
+              }
+            } else {
+              target.value = value;
+            }
+          }
+          elementData.lastCommittedValue = target.value;
+          elementData.commitKey = 1;
+          if (!this.data.actions?.has("Focus")) {
+            elementData.focused = true;
+          }
+        });
+        element.addEventListener("updatefromsandbox", jsEvent => {
+          this.container.classList.add("sandboxModified");
+          const actions = {
+            value(event) {
+              elementData.userValue = event.detail.value ?? "";
+              if (!hasDateOrTime) {
+                storage.setValue(id, {
+                  value: elementData.userValue.toString()
+                });
+              }
+              event.target.value = elementData.userValue;
+            },
+            formattedValue(event) {
+              const {
+                formattedValue
+              } = event.detail;
+              elementData.formattedValue = formattedValue;
+              if (formattedValue !== null && formattedValue !== undefined && event.target !== document.activeElement) {
+                event.target.value = formattedValue;
+              }
+              const data = {
+                formattedValue
+              };
+              if (hasDateOrTime) {
+                data.value = formattedValue;
+              }
+              storage.setValue(id, data);
+            },
+            selRange(event) {
+              event.target.setSelectionRange(...event.detail.selRange);
+            },
+            charLimit: event => {
+              const {
+                charLimit
+              } = event.detail;
+              const {
+                target
+              } = event;
+              if (charLimit === 0) {
+                target.removeAttribute("maxLength");
+                return;
+              }
+              target.setAttribute("maxLength", charLimit);
+              let value = elementData.userValue;
+              if (!value || value.length <= charLimit) {
+                return;
+              }
+              value = value.slice(0, charLimit);
+              target.value = elementData.userValue = value;
+              storage.setValue(id, {
+                value
+              });
+              this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+                source: this,
+                detail: {
+                  id,
+                  name: "Keystroke",
+                  value,
+                  willCommit: true,
+                  commitKey: 1,
+                  selStart: target.selectionStart,
+                  selEnd: target.selectionEnd
+                }
+              });
+            }
+          };
+          this._dispatchEventFromSandbox(actions, jsEvent);
+        });
+        element.addEventListener("keydown", event => {
+          elementData.commitKey = 1;
+          let commitKey = -1;
+          if (event.key === "Escape") {
+            commitKey = 0;
+          } else if (event.key === "Enter" && !this.data.multiLine) {
+            commitKey = 2;
+          } else if (event.key === "Tab") {
+            elementData.commitKey = 3;
+          }
+          if (commitKey === -1) {
+            return;
+          }
+          const {
+            value
+          } = event.target;
+          if (elementData.lastCommittedValue === value) {
+            return;
+          }
+          elementData.lastCommittedValue = value;
+          elementData.userValue = value;
+          this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+            source: this,
+            detail: {
+              id,
+              name: "Keystroke",
+              value,
+              willCommit: true,
+              commitKey,
+              selStart: event.target.selectionStart,
+              selEnd: event.target.selectionEnd
+            }
+          });
+        });
+        const _blurListener = blurListener;
+        blurListener = null;
+        element.addEventListener("blur", event => {
+          if (!elementData.focused || !event.relatedTarget) {
+            return;
+          }
+          if (!this.data.actions?.has("Blur")) {
+            elementData.focused = false;
+          }
+          const {
+            target
+          } = event;
+          let {
+            value
+          } = target;
+          if (hasDateOrTime) {
+            if (value && datetimeType === "time") {
+              const parts = value.split(":").map(v => parseInt(v, 10));
+              value = new Date(2000, 0, 1, parts[0], parts[1], parts[2] || 0).valueOf();
+              target.step = "";
+            } else {
+              if (!value.includes("T")) {
+                value = `${value}T00:00`;
+              }
+              value = new Date(value).valueOf();
+            }
+            target.type = "text";
+          }
+          elementData.userValue = value;
+          if (elementData.lastCommittedValue !== value) {
+            this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+              source: this,
+              detail: {
+                id,
+                name: "Keystroke",
+                value,
+                willCommit: true,
+                commitKey: elementData.commitKey,
+                selStart: event.target.selectionStart,
+                selEnd: event.target.selectionEnd
+              }
+            });
+          }
+          _blurListener(event);
+        });
+        if (this.data.actions?.has("Keystroke")) {
+          element.addEventListener("beforeinput", event => {
+            elementData.lastCommittedValue = null;
+            const {
+              data,
+              target
+            } = event;
+            const {
+              value,
+              selectionStart,
+              selectionEnd
+            } = target;
+            let selStart = selectionStart,
+              selEnd = selectionEnd;
+            switch (event.inputType) {
+              case "deleteWordBackward":
+                {
+                  const wordCharPattern = /\w/;
+                  while (selStart > 0 && !wordCharPattern.test(value[selStart - 1])) {
+                    selStart--;
+                  }
+                  while (selStart > 0 && wordCharPattern.test(value[selStart - 1])) {
+                    selStart--;
+                  }
+                  break;
+                }
+              case "deleteWordForward":
+                {
+                  const match = value.substring(selectionStart).match(/^\W*\w*/);
+                  if (match) {
+                    selEnd += match[0].length;
+                  }
+                  break;
+                }
+              case "deleteContentBackward":
+                if (selectionStart === selectionEnd) {
+                  selStart -= 1;
+                }
+                break;
+              case "deleteContentForward":
+                if (selectionStart === selectionEnd) {
+                  selEnd += 1;
+                }
+                break;
+            }
+            event.preventDefault();
+            this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+              source: this,
+              detail: {
+                id,
+                name: "Keystroke",
+                value,
+                change: data || "",
+                willCommit: false,
+                selStart,
+                selEnd
+              }
+            });
+          });
+        }
+        this._setEventListeners(element, elementData, [["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.value);
+      }
+      if (blurListener) {
+        element.addEventListener("blur", blurListener);
+      }
+      if (this.data.comb) {
+        const fieldWidth = this.data.rect[2] - this.data.rect[0];
+        const combWidth = fieldWidth / maxLen;
+        element.classList.add("comb");
+        element.style.setProperty("--comb-width", `calc(${combWidth}px * var(--total-scale-factor))`);
+        const alignment = this.data.textAlignment;
+        if (alignment === 1 || alignment === 2) {
+          const setCombOffset = () => {
+            const free = maxLen - element.value.length;
+            element.style.setProperty("--comb-offset", `${alignment === 1 ? free >> 1 : free}`);
+          };
+          setCombOffset();
+          for (const evt of ["input", "blur", "resetform", "updatefromsandbox"]) {
+            element.addEventListener(evt, setCombOffset);
+          }
+        }
+      }
+    } else {
+      element = document.createElement("div");
+      element.textContent = this.data.fieldValue;
+      element.style.verticalAlign = "middle";
+      element.style.display = "table-cell";
+      if (this.data.hasOwnCanvas) {
+        element.hidden = true;
+      }
+    }
+    this._setTextStyle(element);
+    this._setBackgroundColor(element);
+    this._setDefaultPropertiesFromJS(element);
+    this.container.append(element);
+    return this.container;
+  }
+}
+class SignatureWidgetAnnotationElement extends WidgetAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: !!parameters.data.hasOwnCanvas
+    });
+  }
+}
+class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: parameters.renderForms
+    });
+  }
+  render() {
+    const storage = this.annotationStorage;
+    const data = this.data;
+    const id = data.id;
+    let value = storage.getValue(id, {
+      value: data.exportValue === data.fieldValue
+    }).value;
+    if (typeof value === "string") {
+      value = value !== "Off";
+      storage.setValue(id, {
+        value
+      });
+    }
+    this.container.classList.add("buttonWidgetAnnotation", "checkBox");
+    const element = document.createElement("input");
+    GetElementsByNameSet.add(element);
+    element.setAttribute("data-element-id", id);
+    element.disabled = data.readOnly;
+    this._setRequired(element, this.data.required);
+    element.type = "checkbox";
+    element.name = data.fieldName;
+    if (value) {
+      element.setAttribute("checked", true);
+    }
+    element.setAttribute("exportValue", data.exportValue);
+    element.tabIndex = 0;
+    element.addEventListener("change", event => {
+      const {
+        name,
+        checked
+      } = event.target;
+      for (const checkbox of this._getElementsByName(name, id)) {
+        const curChecked = checked && checkbox.exportValue === data.exportValue;
+        if (checkbox.domElement) {
+          checkbox.domElement.checked = curChecked;
+        }
+        storage.setValue(checkbox.id, {
+          value: curChecked
+        });
+      }
+      storage.setValue(id, {
+        value: checked
+      });
+    });
+    element.addEventListener("resetform", event => {
+      const defaultValue = data.defaultFieldValue || "Off";
+      event.target.checked = defaultValue === data.exportValue;
+    });
+    if (this.enableScripting && this.hasJSActions) {
+      element.addEventListener("updatefromsandbox", jsEvent => {
+        const actions = {
+          value(event) {
+            event.target.checked = event.detail.value !== "Off";
+            storage.setValue(id, {
+              value: event.target.checked
+            });
+          }
+        };
+        this._dispatchEventFromSandbox(actions, jsEvent);
+      });
+      this._setEventListeners(element, null, [["change", "Validate"], ["change", "Action"], ["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.checked);
+    }
+    this._setDefaultPropertiesFromJS(element);
+    this.container.append(element);
+    return this.container;
+  }
+}
+class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: parameters.renderForms
+    });
+  }
+  render() {
+    this.container.classList.add("buttonWidgetAnnotation", "radioButton");
+    const storage = this.annotationStorage;
+    const data = this.data;
+    const id = data.id;
+    let value = storage.getValue(id, {
+      value: data.buttonValue !== null && data.fieldValue === data.buttonValue
+    }).value;
+    if (typeof value === "string") {
+      value = value !== data.buttonValue;
+      storage.setValue(id, {
+        value
+      });
+    }
+    if (value) {
+      for (const radio of this._getElementsByName(data.fieldName, id)) {
+        storage.setValue(radio.id, {
+          value: false
+        });
+      }
+    }
+    const element = document.createElement("input");
+    GetElementsByNameSet.add(element);
+    element.setAttribute("data-element-id", id);
+    element.disabled = data.readOnly;
+    this._setRequired(element, this.data.required);
+    element.type = "radio";
+    element.name = data.fieldName;
+    if (value) {
+      element.setAttribute("checked", true);
+    }
+    element.tabIndex = 0;
+    element.addEventListener("change", event => {
+      const {
+        name,
+        checked
+      } = event.target;
+      for (const radio of this._getElementsByName(name, id)) {
+        storage.setValue(radio.id, {
+          value: false
+        });

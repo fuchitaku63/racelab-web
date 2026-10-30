@@ -1,0 +1,1000 @@
+    if (!this.annotationElementId) {
+      this._uiManager.a11yAlert(AnnotationEditor._l10nAlert.freetext);
+    }
+    this.canAddComment = false;
+  }
+  static initialize(l10n, uiManager) {
+    AnnotationEditor.initialize(l10n, uiManager);
+    const style = getComputedStyle(document.documentElement);
+    this._internalPadding = parseFloat(style.getPropertyValue("--freetext-padding"));
+  }
+  static updateDefaultParams(type, value) {
+    switch (type) {
+      case AnnotationEditorParamsType.FREETEXT_SIZE:
+        FreeTextEditor._defaultFontSize = value;
+        break;
+      case AnnotationEditorParamsType.FREETEXT_COLOR:
+        FreeTextEditor._defaultColor = value;
+        break;
+    }
+  }
+  updateParams(type, value) {
+    switch (type) {
+      case AnnotationEditorParamsType.FREETEXT_SIZE:
+        this.#updateFontSize(value);
+        break;
+      case AnnotationEditorParamsType.FREETEXT_COLOR:
+        this.#updateColor(value);
+        break;
+    }
+  }
+  static get defaultPropertiesToUpdate() {
+    return [[AnnotationEditorParamsType.FREETEXT_SIZE, FreeTextEditor._defaultFontSize], [AnnotationEditorParamsType.FREETEXT_COLOR, FreeTextEditor._defaultColor || AnnotationEditor._defaultLineColor]];
+  }
+  get propertiesToUpdate() {
+    return [[AnnotationEditorParamsType.FREETEXT_SIZE, this.#fontSize], [AnnotationEditorParamsType.FREETEXT_COLOR, this.color]];
+  }
+  get toolbarButtons() {
+    this._colorPicker ||= new BasicColorPicker(this);
+    return [["colorPicker", this._colorPicker]];
+  }
+  get colorType() {
+    return AnnotationEditorParamsType.FREETEXT_COLOR;
+  }
+  #updateFontSize(fontSize) {
+    const setFontsize = size => {
+      this.editorDiv.style.fontSize = `calc(${size}px * var(--total-scale-factor))`;
+      this.translate(0, -(size - this.#fontSize) * this.parentScale);
+      this.#fontSize = size;
+      this.#setEditorDimensions();
+    };
+    const savedFontsize = this.#fontSize;
+    this.addCommands({
+      cmd: setFontsize.bind(this, fontSize),
+      undo: setFontsize.bind(this, savedFontsize),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
+      mustExec: true,
+      type: AnnotationEditorParamsType.FREETEXT_SIZE,
+      overwriteIfSameType: true,
+      keepUndo: true
+    });
+  }
+  onUpdatedColor() {
+    this.editorDiv.style.color = this.color;
+    this._colorPicker?.update(this.color);
+    super.onUpdatedColor();
+  }
+  #updateColor(color) {
+    const setColor = col => {
+      this.color = col;
+      this.onUpdatedColor();
+    };
+    const savedColor = this.color;
+    this.addCommands({
+      cmd: setColor.bind(this, color),
+      undo: setColor.bind(this, savedColor),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
+      mustExec: true,
+      type: AnnotationEditorParamsType.FREETEXT_COLOR,
+      overwriteIfSameType: true,
+      keepUndo: true
+    });
+  }
+  _translateEmpty(x, y) {
+    this._uiManager.translateSelectedEditors(x, y, true);
+  }
+  getInitialTranslation() {
+    const scale = this.parentScale;
+    return [-FreeTextEditor._internalPadding * scale, -(FreeTextEditor._internalPadding + this.#fontSize) * scale];
+  }
+  rebuild() {
+    if (!this.parent) {
+      return;
+    }
+    super.rebuild();
+    if (this.div === null) {
+      return;
+    }
+    if (!this.isAttachedToDOM) {
+      this.parent.add(this);
+    }
+  }
+  enableEditMode() {
+    if (!super.enableEditMode()) {
+      return false;
+    }
+    this.overlayDiv.classList.remove("enabled");
+    this.editorDiv.contentEditable = true;
+    this._isDraggable = false;
+    this.div.removeAttribute("aria-activedescendant");
+    this.#editModeAC = new AbortController();
+    const signal = this._uiManager.combinedSignal(this.#editModeAC);
+    this.editorDiv.addEventListener("keydown", this.editorDivKeydown.bind(this), {
+      signal
+    });
+    this.editorDiv.addEventListener("focus", this.editorDivFocus.bind(this), {
+      signal
+    });
+    this.editorDiv.addEventListener("blur", this.editorDivBlur.bind(this), {
+      signal
+    });
+    this.editorDiv.addEventListener("input", this.editorDivInput.bind(this), {
+      signal
+    });
+    this.editorDiv.addEventListener("paste", this.editorDivPaste.bind(this), {
+      signal
+    });
+    return true;
+  }
+  disableEditMode() {
+    if (!super.disableEditMode()) {
+      return false;
+    }
+    this.overlayDiv.classList.add("enabled");
+    this.editorDiv.contentEditable = false;
+    this.div.setAttribute("aria-activedescendant", this.#editorDivId);
+    this._isDraggable = true;
+    this.#editModeAC?.abort();
+    this.#editModeAC = null;
+    this.div.focus({
+      preventScroll: true
+    });
+    this.isEditing = false;
+    this.parent.div.classList.add("freetextEditing");
+    return true;
+  }
+  focusin(event) {
+    if (!this._focusEventsAllowed) {
+      return;
+    }
+    super.focusin(event);
+    if (event.target !== this.editorDiv) {
+      this.editorDiv.focus();
+    }
+  }
+  onceAdded(focus) {
+    if (this.width) {
+      return;
+    }
+    this.enableEditMode();
+    if (focus) {
+      this.editorDiv.focus();
+    }
+    if (this._initialOptions?.isCentered) {
+      this.center();
+    }
+    this._initialOptions = null;
+  }
+  isEmpty() {
+    return !this.editorDiv || this.editorDiv.innerText.trim() === "";
+  }
+  remove() {
+    this.isEditing = false;
+    if (this.parent) {
+      this.parent.setEditingState(true);
+      this.parent.div.classList.add("freetextEditing");
+    }
+    super.remove();
+  }
+  #extractText() {
+    const buffer = [];
+    this.editorDiv.normalize();
+    let prevChild = null;
+    for (const child of this.editorDiv.childNodes) {
+      if (prevChild?.nodeType === Node.TEXT_NODE && child.nodeName === "BR") {
+        continue;
+      }
+      buffer.push(FreeTextEditor.#getNodeContent(child));
+      prevChild = child;
+    }
+    return buffer.join("\n");
+  }
+  #setEditorDimensions() {
+    const [parentWidth, parentHeight] = this.parentDimensions;
+    let rect;
+    if (this.isAttachedToDOM) {
+      rect = this.div.getBoundingClientRect();
+    } else {
+      const {
+        currentLayer,
+        div
+      } = this;
+      const savedDisplay = div.style.display;
+      const savedVisibility = div.classList.contains("hidden");
+      div.classList.remove("hidden");
+      div.style.display = "hidden";
+      currentLayer.div.append(this.div);
+      rect = div.getBoundingClientRect();
+      div.remove();
+      div.style.display = savedDisplay;
+      div.classList.toggle("hidden", savedVisibility);
+    }
+    if (this.rotation % 180 === this.parentRotation % 180) {
+      this.width = rect.width / parentWidth;
+      this.height = rect.height / parentHeight;
+    } else {
+      this.width = rect.height / parentWidth;
+      this.height = rect.width / parentHeight;
+    }
+    this.fixAndSetPosition();
+  }
+  commit() {
+    if (!this.isInEditMode()) {
+      return;
+    }
+    super.commit();
+    this.disableEditMode();
+    const savedText = this.#content;
+    const newText = this.#content = this.#extractText().trimEnd();
+    if (savedText === newText) {
+      return;
+    }
+    const setText = text => {
+      this.#content = text;
+      if (!text) {
+        this.remove();
+        return;
+      }
+      this.#setContent();
+      this._uiManager.rebuild(this);
+      this.#setEditorDimensions();
+    };
+    this.addCommands({
+      cmd: () => {
+        setText(newText);
+      },
+      undo: () => {
+        setText(savedText);
+      },
+      mustExec: false
+    });
+    this.#setEditorDimensions();
+  }
+  shouldGetKeyboardEvents() {
+    return this.isInEditMode();
+  }
+  enterInEditMode() {
+    this.enableEditMode();
+    this.editorDiv.focus();
+  }
+  keydown(event) {
+    if (event.target === this.div && event.key === "Enter") {
+      this.enterInEditMode();
+      event.preventDefault();
+    }
+  }
+  editorDivKeydown(event) {
+    FreeTextEditor._keyboardManager.exec(this, event);
+  }
+  editorDivFocus(event) {
+    this.isEditing = true;
+  }
+  editorDivBlur(event) {
+    this.isEditing = false;
+  }
+  editorDivInput(event) {
+    this.parent.div.classList.toggle("freetextEditing", this.isEmpty());
+  }
+  disableEditing() {
+    this.editorDiv.setAttribute("role", "comment");
+    this.editorDiv.removeAttribute("aria-multiline");
+  }
+  enableEditing() {
+    this.editorDiv.setAttribute("role", "textbox");
+    this.editorDiv.setAttribute("aria-multiline", true);
+  }
+  get canChangeContent() {
+    return true;
+  }
+  render() {
+    if (this.div) {
+      return this.div;
+    }
+    let baseX, baseY;
+    if (this._isCopy || this.annotationElementId) {
+      baseX = this.x;
+      baseY = this.y;
+    }
+    super.render();
+    this.editorDiv = document.createElement("div");
+    this.editorDiv.className = "internal";
+    this.editorDiv.setAttribute("id", this.#editorDivId);
+    this.editorDiv.setAttribute("data-l10n-id", "pdfjs-free-text2");
+    this.editorDiv.setAttribute("data-l10n-attrs", "default-content");
+    this.enableEditing();
+    this.editorDiv.contentEditable = true;
+    const {
+      style
+    } = this.editorDiv;
+    style.fontSize = `calc(${this.#fontSize}px * var(--total-scale-factor))`;
+    style.color = this.color;
+    this.div.append(this.editorDiv);
+    this.overlayDiv = document.createElement("div");
+    this.overlayDiv.classList.add("overlay", "enabled");
+    this.div.append(this.overlayDiv);
+    if (this._isCopy || this.annotationElementId) {
+      const [parentWidth, parentHeight] = this.parentDimensions;
+      if (this.annotationElementId) {
+        const {
+          position
+        } = this._initialData;
+        let [tx, ty] = this.getInitialTranslation();
+        [tx, ty] = this.pageTranslationToScreen(tx, ty);
+        const [pageWidth, pageHeight] = this.pageDimensions;
+        const [pageX, pageY] = this.pageTranslation;
+        let posX, posY;
+        switch (this.rotation) {
+          case 0:
+            posX = baseX + (position[0] - pageX) / pageWidth;
+            posY = baseY + this.height - (position[1] - pageY) / pageHeight;
+            break;
+          case 90:
+            posX = baseX + (position[0] - pageX) / pageWidth;
+            posY = baseY - (position[1] - pageY) / pageHeight;
+            [tx, ty] = [ty, -tx];
+            break;
+          case 180:
+            posX = baseX - this.width + (position[0] - pageX) / pageWidth;
+            posY = baseY - (position[1] - pageY) / pageHeight;
+            [tx, ty] = [-tx, -ty];
+            break;
+          case 270:
+            posX = baseX + (position[0] - pageX - this.height * pageHeight) / pageWidth;
+            posY = baseY + (position[1] - pageY - this.width * pageWidth) / pageHeight;
+            [tx, ty] = [-ty, tx];
+            break;
+        }
+        this.setAt(posX * parentWidth, posY * parentHeight, tx, ty);
+      } else {
+        this._moveAfterPaste(baseX, baseY);
+      }
+      this.#setContent();
+      this._isDraggable = true;
+      this.editorDiv.contentEditable = false;
+    } else {
+      this._isDraggable = false;
+      this.editorDiv.contentEditable = true;
+    }
+    return this.div;
+  }
+  static #getNodeContent(node) {
+    return (node.nodeType === Node.TEXT_NODE ? node.nodeValue : node.innerText).replaceAll(EOL_PATTERN, "");
+  }
+  editorDivPaste(event) {
+    const clipboardData = event.clipboardData || window.clipboardData;
+    const {
+      types
+    } = clipboardData;
+    if (types.length === 1 && types[0] === "text/plain") {
+      return;
+    }
+    event.preventDefault();
+    const paste = FreeTextEditor.#deserializeContent(clipboardData.getData("text") || "").replaceAll(EOL_PATTERN, "\n");
+    if (!paste) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection.rangeCount) {
+      return;
+    }
+    this.editorDiv.normalize();
+    selection.deleteFromDocument();
+    const range = selection.getRangeAt(0);
+    if (!paste.includes("\n")) {
+      range.insertNode(document.createTextNode(paste));
+      this.editorDiv.normalize();
+      selection.collapseToStart();
+      return;
+    }
+    const {
+      startContainer,
+      startOffset
+    } = range;
+    const bufferBefore = [];
+    const bufferAfter = [];
+    if (startContainer.nodeType === Node.TEXT_NODE) {
+      const parent = startContainer.parentElement;
+      bufferAfter.push(startContainer.nodeValue.slice(startOffset).replaceAll(EOL_PATTERN, ""));
+      if (parent !== this.editorDiv) {
+        let buffer = bufferBefore;
+        for (const child of this.editorDiv.childNodes) {
+          if (child === parent) {
+            buffer = bufferAfter;
+            continue;
+          }
+          buffer.push(FreeTextEditor.#getNodeContent(child));
+        }
+      }
+      bufferBefore.push(startContainer.nodeValue.slice(0, startOffset).replaceAll(EOL_PATTERN, ""));
+    } else if (startContainer === this.editorDiv) {
+      let buffer = bufferBefore;
+      let i = 0;
+      for (const child of this.editorDiv.childNodes) {
+        if (i++ === startOffset) {
+          buffer = bufferAfter;
+        }
+        buffer.push(FreeTextEditor.#getNodeContent(child));
+      }
+    }
+    this.#content = `${bufferBefore.join("\n")}${paste}${bufferAfter.join("\n")}`;
+    this.#setContent();
+    const newRange = new Range();
+    let beforeLength = Math.sumPrecise(bufferBefore.map(line => line.length));
+    for (const {
+      firstChild
+    } of this.editorDiv.childNodes) {
+      if (firstChild.nodeType === Node.TEXT_NODE) {
+        const length = firstChild.nodeValue.length;
+        if (beforeLength <= length) {
+          newRange.setStart(firstChild, beforeLength);
+          newRange.setEnd(firstChild, beforeLength);
+          break;
+        }
+        beforeLength -= length;
+      }
+    }
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+  }
+  #setContent() {
+    this.editorDiv.replaceChildren();
+    if (!this.#content) {
+      return;
+    }
+    for (const line of this.#content.split("\n")) {
+      const div = document.createElement("div");
+      div.append(line ? document.createTextNode(line) : document.createElement("br"));
+      this.editorDiv.append(div);
+    }
+  }
+  #serializeContent() {
+    return this.#content.replaceAll("\xa0", " ");
+  }
+  static #deserializeContent(content) {
+    return content.replaceAll(" ", "\xa0");
+  }
+  get contentDiv() {
+    return this.editorDiv;
+  }
+  getPDFRect() {
+    const padding = FreeTextEditor._internalPadding * this.parentScale;
+    return this.getRect(padding, padding);
+  }
+  static async deserialize(data, parent, uiManager) {
+    let initialData = null;
+    if (data instanceof FreeTextAnnotationElement) {
+      const {
+        data: {
+          defaultAppearanceData: {
+            fontSize,
+            fontColor
+          },
+          rect,
+          rotation,
+          id,
+          popupRef,
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
+        },
+        textContent,
+        textPosition,
+        parent: {
+          page: {
+            pageNumber
+          }
+        }
+      } = data;
+      if (!textContent?.length) {
+        return null;
+      }
+      initialData = data = {
+        annotationType: AnnotationEditorType.FREETEXT,
+        color: Array.from(fontColor),
+        fontSize,
+        value: textContent.join("\n"),
+        position: textPosition,
+        pageIndex: pageNumber - 1,
+        rect: rect.slice(0),
+        rotation,
+        annotationElementId: id,
+        id,
+        deleted: false,
+        popupRef,
+        comment: contentsObj?.str || null,
+        richText,
+        creationDate,
+        modificationDate
+      };
+    }
+    const editor = await super.deserialize(data, parent, uiManager);
+    editor.#fontSize = data.fontSize;
+    editor.color = Util.makeHexColor(...data.color);
+    editor.#content = FreeTextEditor.#deserializeContent(data.value);
+    editor._initialData = initialData;
+    if (data.comment) {
+      editor.setCommentData(data);
+    }
+    return editor;
+  }
+  serialize(isForCopying = false) {
+    if (this.isEmpty()) {
+      return null;
+    }
+    if (this.deleted) {
+      return this.serializeDeleted();
+    }
+    const color = AnnotationEditor._colorManager.convert(this.isAttachedToDOM ? getComputedStyle(this.editorDiv).color : this.color);
+    const serialized = Object.assign(super.serialize(isForCopying), {
+      color,
+      fontSize: this.#fontSize,
+      value: this.#serializeContent()
+    });
+    this.addComment(serialized);
+    if (isForCopying) {
+      serialized.isCopy = true;
+      return serialized;
+    }
+    if (this.annotationElementId && !this.#hasElementChanged(serialized)) {
+      return null;
+    }
+    serialized.id = this.annotationElementId;
+    return serialized;
+  }
+  #hasElementChanged(serialized) {
+    const {
+      value,
+      fontSize,
+      color,
+      pageIndex
+    } = this._initialData;
+    return this.hasEditedComment || this._hasBeenMoved || serialized.value !== value || serialized.fontSize !== fontSize || serialized.color.some((c, i) => c !== color[i]) || serialized.pageIndex !== pageIndex;
+  }
+  renderAnnotationElement(annotation) {
+    const content = super.renderAnnotationElement(annotation);
+    if (!content) {
+      return null;
+    }
+    const {
+      style
+    } = content;
+    style.fontSize = `calc(${this.#fontSize}px * var(--total-scale-factor))`;
+    style.color = this.color;
+    content.replaceChildren();
+    for (const line of this.#content.split("\n")) {
+      const div = document.createElement("div");
+      div.append(line ? document.createTextNode(line) : document.createElement("br"));
+      content.append(div);
+    }
+    annotation.updateEdited({
+      rect: this.getPDFRect(),
+      popup: this._uiManager.hasCommentManager() || this.hasEditedComment ? this.comment : {
+        text: this.#content
+      }
+    });
+    return content;
+  }
+  resetAnnotationElement(annotation) {
+    super.resetAnnotationElement(annotation);
+    annotation.resetEdited();
+  }
+}
+
+;// ./src/display/editor/draw.js
+
+
+
+
+
+
+
+
+
+
+
+
+class DrawingOptions {
+  #svgProperties = Object.create(null);
+  updateProperty(name, value) {
+    this[name] = value;
+    this.updateSVGProperty(name, value);
+  }
+  updateProperties(properties) {
+    if (!properties) {
+      return;
+    }
+    for (const [name, value] of Object.entries(properties)) {
+      if (!name.startsWith("_")) {
+        this.updateProperty(name, value);
+      }
+    }
+  }
+  updateSVGProperty(name, value) {
+    this.#svgProperties[name] = value;
+  }
+  toSVGProperties() {
+    const root = this.#svgProperties;
+    this.#svgProperties = Object.create(null);
+    return {
+      root
+    };
+  }
+  reset() {
+    this.#svgProperties = Object.create(null);
+  }
+  updateAll(options = this) {
+    this.updateProperties(options);
+  }
+  clone() {
+    unreachable("Not implemented");
+  }
+}
+class DrawingEditor extends AnnotationEditor {
+  #internalDiv = null;
+  #mustBeCommitted;
+  _clipPathId = null;
+  _colorPicker = null;
+  _drawId = null;
+  _drawOutlines = null;
+  _focusDrawId = null;
+  static _currentDrawId = -1;
+  static _currentParent = null;
+  static #currentDraw = null;
+  static #currentDrawingAC = null;
+  static #currentDrawingOptions = null;
+  static #currentClipPathId = null;
+  static _INNER_MARGIN = 3;
+  constructor(params) {
+    super(params);
+    this.#mustBeCommitted = params.mustBeCommitted || false;
+    this._addOutlines(params);
+  }
+  onUpdatedColor() {
+    this._colorPicker?.update(this.color);
+    super.onUpdatedColor();
+  }
+  onUpdatedOpacity() {
+    this._colorPicker?.updateOpacity?.(this.opacity);
+  }
+  _addOutlines(params) {
+    if (params.drawOutlines) {
+      this.#createDrawOutlines(params);
+      this.#addToDrawLayer();
+    }
+  }
+  #createDrawOutlines({
+    drawOutlines,
+    drawId,
+    drawingOptions,
+    clipPathId
+  }) {
+    this._drawOutlines = drawOutlines;
+    this._drawingOptions ||= drawingOptions;
+    if (!this.annotationElementId) {
+      this._uiManager.a11yAlert(AnnotationEditor._l10nAlert[this.editorType]);
+    }
+    if (drawId >= 0) {
+      this._drawId = drawId;
+      this._clipPathId = clipPathId ?? null;
+      this.parent.drawLayer.finalizeDraw(drawId, drawOutlines.defaultProperties);
+      this.#createFocusOutline(this.parent);
+    } else {
+      this._drawId = this.#createDrawing(drawOutlines, this.parent);
+    }
+    this.#updateBbox(drawOutlines.box);
+  }
+  #createDrawing(drawOutlines, parent) {
+    const {
+      id,
+      clipPathId
+    } = parent.drawLayer.draw(DrawingEditor._mergeSVGProperties(this._drawingOptions.toSVGProperties(), drawOutlines.defaultSVGProperties), false, this.constructor._hasClipPath);
+    if (this.constructor._hasClipPath) {
+      this._clipPathId = clipPathId;
+    }
+    this.#createFocusOutline(parent);
+    return id;
+  }
+  #createFocusOutline(parent) {
+    const properties = this._drawOutlines.getFocusSVGProperties(this.#rotationAngle);
+    if (properties) {
+      this._focusDrawId = parent.drawLayer.drawOutline(properties, this._drawOutlines.focusMustRemoveSelfIntersections);
+    }
+  }
+  #updateFocusOutline(angle = this.#rotationAngle) {
+    if (this._focusDrawId === null) {
+      return;
+    }
+    this.parent?.drawLayer.updateProperties(this._focusDrawId, this._drawOutlines.getFocusSVGProperties(angle));
+  }
+  #toggleFocusOutlineClass(rootClass) {
+    if (this._focusDrawId !== null) {
+      this.parent?.drawLayer.updateProperties(this._focusDrawId, {
+        rootClass
+      });
+    }
+  }
+  #updateVisibility() {
+    const {
+      parent,
+      _drawId,
+      _focusDrawId,
+      _isVisible
+    } = this;
+    if (!parent || _drawId === null) {
+      return;
+    }
+    const rootClass = {
+      hidden: !_isVisible
+    };
+    parent.drawLayer.updateProperties(_drawId, {
+      rootClass
+    });
+    if (_focusDrawId !== null) {
+      parent.drawLayer.updateProperties(_focusDrawId, {
+        rootClass
+      });
+    }
+  }
+  static _mergeSVGProperties(p1, p2) {
+    const p1Keys = new Set(Object.keys(p1));
+    for (const [key, value] of Object.entries(p2)) {
+      if (p1Keys.has(key)) {
+        Object.assign(p1[key], value);
+      } else {
+        p1[key] = value;
+      }
+    }
+    return p1;
+  }
+  static getDefaultDrawingOptions(_options) {
+    unreachable("Not implemented");
+  }
+  static get typesMap() {
+    unreachable("Not implemented");
+  }
+  static get isDrawer() {
+    return true;
+  }
+  static get _hasClipPath() {
+    return false;
+  }
+  static get _hasDrawClass() {
+    return true;
+  }
+  static get supportMultipleDrawings() {
+    return false;
+  }
+  get _drawRotation() {
+    return this.rotation;
+  }
+  get _opacityName() {
+    return this.constructor.typesMap.get(this.opacityType);
+  }
+  get #rotationAngle() {
+    return (this.parentRotation - this._drawRotation + 360) % 360;
+  }
+  static updateDefaultParams(type, value) {
+    const propertyName = this.typesMap.get(type);
+    if (propertyName) {
+      this._defaultDrawingOptions.updateProperty(propertyName, value);
+    }
+    if (this._currentParent) {
+      DrawingEditor.#currentDraw.updateProperty(propertyName, value);
+      this._currentParent.drawLayer.updateProperties(this._currentDrawId, this._defaultDrawingOptions.toSVGProperties());
+    }
+  }
+  updateParams(type, value) {
+    const propertyName = this.constructor.typesMap.get(type);
+    if (propertyName) {
+      this._updateProperty(type, propertyName, value);
+    }
+  }
+  static get defaultPropertiesToUpdate() {
+    const properties = [];
+    const options = this._defaultDrawingOptions;
+    for (const [type, name] of this.typesMap) {
+      properties.push([type, options[name]]);
+    }
+    return properties;
+  }
+  get propertiesToUpdate() {
+    const properties = [];
+    const {
+      _drawingOptions
+    } = this;
+    for (const [type, name] of this.constructor.typesMap) {
+      properties.push([type, _drawingOptions[name]]);
+    }
+    return properties;
+  }
+  _updateProperty(type, name, value) {
+    const options = this._drawingOptions;
+    const savedValue = options[name];
+    const setter = val => {
+      options.updateProperty(name, val);
+      const bbox = this._drawOutlines.updateProperty(name, val);
+      if (bbox) {
+        this.#updateBbox(bbox);
+      }
+      this.parent?.drawLayer.updateProperties(this._drawId, options.toSVGProperties());
+      if (type === this.colorType) {
+        this.onUpdatedColor();
+      } else if (type === this.opacityType) {
+        this.onUpdatedOpacity();
+      }
+    };
+    this.addCommands({
+      cmd: setter.bind(this, value),
+      undo: setter.bind(this, savedValue),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
+      mustExec: true,
+      type,
+      overwriteIfSameType: true,
+      keepUndo: true
+    });
+  }
+  _updateColorAndOpacity(color, opacity, type = this.colorAndOpacityType) {
+    const colorName = this.constructor.typesMap.get(this.colorType);
+    const opacityName = this._opacityName;
+    const options = this._drawingOptions;
+    const savedColor = options[colorName];
+    const savedOpacity = options[opacityName];
+    const setter = (c, op) => {
+      options.updateProperty(colorName, c);
+      options.updateProperty(opacityName, op);
+      this._drawOutlines.updateProperty(colorName, c);
+      this._drawOutlines.updateProperty(opacityName, op);
+      this.parent?.drawLayer.updateProperties(this._drawId, options.toSVGProperties());
+      this.onUpdatedColor();
+      this.onUpdatedOpacity();
+    };
+    this.addCommands({
+      cmd: setter.bind(this, color, opacity),
+      undo: setter.bind(this, savedColor, savedOpacity),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
+      mustExec: true,
+      type,
+      overwriteIfSameType: true,
+      keepUndo: true
+    });
+  }
+  _onResizing() {
+    this.parent?.drawLayer.updateProperties(this._drawId, DrawingEditor._mergeSVGProperties(this._drawOutlines.getPathResizingSVGProperties(this.#convertToDrawSpace()), {
+      bbox: this.#rotateBox()
+    }));
+  }
+  _onResized() {
+    this.parent?.drawLayer.updateProperties(this._drawId, DrawingEditor._mergeSVGProperties(this._drawOutlines.getPathResizedSVGProperties(this.#convertToDrawSpace()), {
+      bbox: this.#rotateBox()
+    }));
+    this.#updateFocusOutline();
+  }
+  _onTranslating(_x, _y) {
+    this.parent?.drawLayer.updateProperties(this._drawId, {
+      bbox: this.#rotateBox()
+    });
+  }
+  _onTranslated() {
+    this.parent?.drawLayer.updateProperties(this._drawId, DrawingEditor._mergeSVGProperties(this._drawOutlines.getPathTranslatedSVGProperties(this.#convertToDrawSpace(), this.parentDimensions), {
+      bbox: this.#rotateBox()
+    }));
+  }
+  _onStartDragging() {
+    this.parent?.drawLayer.updateProperties(this._drawId, {
+      rootClass: {
+        moving: true
+      }
+    });
+  }
+  _onStopDragging() {
+    this.parent?.drawLayer.updateProperties(this._drawId, {
+      rootClass: {
+        moving: false
+      }
+    });
+  }
+  get _mustBeDisabledOnCommit() {
+    return true;
+  }
+  commit() {
+    super.commit();
+    if (this._mustBeDisabledOnCommit) {
+      this.disableEditMode();
+      this.disableEditing();
+    }
+  }
+  disableEditing() {
+    super.disableEditing();
+    this.div.classList.toggle("disabled", true);
+  }
+  enableEditing() {
+    super.enableEditing();
+    this.div.classList.toggle("disabled", false);
+  }
+  getBaseTranslation() {
+    return [0, 0];
+  }
+  get isResizable() {
+    return true;
+  }
+  onceAdded(focus) {
+    if (!this.annotationElementId) {
+      this.parent.addUndoableEditor(this);
+    }
+    this._isDraggable = true;
+    if (this.#mustBeCommitted) {
+      this.#mustBeCommitted = false;
+      this.commit();
+      this.parent.setSelected(this);
+      if (focus && this.isOnScreen) {
+        this.div.focus();
+      }
+    }
+  }
+  remove() {
+    this._uiManager.removeShouldRescale(this);
+    this.#cleanDrawLayer();
+    super.remove();
+  }
+  rebuild() {
+    if (!this.parent) {
+      return;
+    }
+    super.rebuild();
+    if (this.div === null) {
+      return;
+    }
+    this.#addToDrawLayer();
+    this.#updateBbox(this._drawOutlines.box);
+    if (!this.isAttachedToDOM) {
+      this.parent.add(this);
+    }
+  }
+  setParent(parent) {
+    let mustBeSelected = false;
+    if (this.parent && !parent) {
+      this._uiManager.removeShouldRescale(this);
+      this.#cleanDrawLayer();
+    } else if (parent) {
+      this._uiManager.addShouldRescale(this);
+      this.#addToDrawLayer(parent);
+      mustBeSelected = !this.parent && this.div?.classList.contains("selectedEditor");
+    }
+    super.setParent(parent);
+    this.#updateVisibility();
+    if (mustBeSelected) {
+      this.select();
+    }
+  }
+  #cleanDrawLayer() {
+    if (this._drawId === null || !this.parent) {
+      return;
+    }
+    const {
+      drawLayer
+    } = this.parent;
+    drawLayer.remove(this._drawId);
+    this._drawId = null;
+    if (this._focusDrawId !== null) {
+      drawLayer.remove(this._focusDrawId);
+      this._focusDrawId = null;
+    }
+    this._drawingOptions.reset();
+  }
+  #addToDrawLayer(parent = this.parent) {
+    if (this._drawId !== null && this.parent === parent) {
+      return;
+    }
+    if (this._drawId !== null) {
+      const {
+        drawLayer
+      } = this.parent;
+      drawLayer.updateParent(this._drawId, parent.drawLayer);
+      if (this._focusDrawId !== null) {
+        drawLayer.updateParent(this._focusDrawId, parent.drawLayer);
+      }
+      return;
+    }
+    this._drawingOptions.updateAll();
+    this._drawId = this.#createDrawing(this._drawOutlines, parent);

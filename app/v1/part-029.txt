@@ -1,0 +1,1000 @@
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
+}
+class CircleAnnotationElement extends AnnotationElement {
+  #circle = null;
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+  }
+  render() {
+    this.container.classList.add("circleAnnotation");
+    const {
+      data,
+      width,
+      height
+    } = this;
+    const svg = this.svgFactory.create(width, height, true);
+    const borderWidth = data.borderStyle.width;
+    const circle = this.#circle = this.svgFactory.createElement("svg:ellipse");
+    circle.setAttribute("cx", width / 2);
+    circle.setAttribute("cy", height / 2);
+    circle.setAttribute("rx", width / 2 - borderWidth / 2);
+    circle.setAttribute("ry", height / 2 - borderWidth / 2);
+    circle.setAttribute("stroke-width", borderWidth || 1);
+    circle.setAttribute("stroke", "transparent");
+    circle.setAttribute("fill", "transparent");
+    svg.append(circle);
+    this.container.append(svg);
+    if (!data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    return this.container;
+  }
+  getElementsToTriggerPopup() {
+    return this.#circle;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
+}
+class PolylineAnnotationElement extends AnnotationElement {
+  #polyline = null;
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+    this.containerClassName = "polylineAnnotation";
+    this.svgElementName = "svg:polyline";
+  }
+  render() {
+    this.container.classList.add(this.containerClassName);
+    const {
+      data: {
+        rect,
+        vertices,
+        borderStyle,
+        popupRef
+      },
+      width,
+      height
+    } = this;
+    if (!vertices) {
+      return this.container;
+    }
+    const svg = this.svgFactory.create(width, height, true);
+    let points = [];
+    for (let i = 0, ii = vertices.length; i < ii; i += 2) {
+      const x = vertices[i] - rect[0];
+      const y = rect[3] - vertices[i + 1];
+      points.push(`${x},${y}`);
+    }
+    points = points.join(" ");
+    const polyline = this.#polyline = this.svgFactory.createElement(this.svgElementName);
+    polyline.setAttribute("points", points);
+    polyline.setAttribute("stroke-width", borderStyle.width || 1);
+    polyline.setAttribute("stroke", "transparent");
+    polyline.setAttribute("fill", "transparent");
+    svg.append(polyline);
+    this.container.append(svg);
+    if (!popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    return this.container;
+  }
+  getElementsToTriggerPopup() {
+    return this.#polyline;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
+}
+class PolygonAnnotationElement extends PolylineAnnotationElement {
+  constructor(parameters) {
+    super(parameters);
+    this.containerClassName = "polygonAnnotation";
+    this.svgElementName = "svg:polygon";
+  }
+}
+class CaretAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+  }
+  render() {
+    this.container.classList.add("caretAnnotation");
+    if (!this.data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    return this.container;
+  }
+}
+class InkAnnotationElement extends AnnotationElement {
+  #polylinesGroupElement = null;
+  #polylines = [];
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+    this.containerClassName = "inkAnnotation";
+    this.svgElementName = "svg:polyline";
+    this.annotationEditorType = this.data.it === "InkHighlight" ? AnnotationEditorType.HIGHLIGHT : AnnotationEditorType.INK;
+  }
+  #getTransform(rotation, rect) {
+    switch (rotation) {
+      case 90:
+        return {
+          transform: `rotate(90) translate(${-rect[0]},${rect[1]}) scale(1,-1)`,
+          width: rect[3] - rect[1],
+          height: rect[2] - rect[0]
+        };
+      case 180:
+        return {
+          transform: `rotate(180) translate(${-rect[2]},${rect[1]}) scale(1,-1)`,
+          width: rect[2] - rect[0],
+          height: rect[3] - rect[1]
+        };
+      case 270:
+        return {
+          transform: `rotate(270) translate(${-rect[2]},${rect[3]}) scale(1,-1)`,
+          width: rect[3] - rect[1],
+          height: rect[2] - rect[0]
+        };
+      default:
+        return {
+          transform: `translate(${-rect[0]},${rect[3]}) scale(1,-1)`,
+          width: rect[2] - rect[0],
+          height: rect[3] - rect[1]
+        };
+    }
+  }
+  render() {
+    this.container.classList.add(this.containerClassName);
+    const {
+      data: {
+        rect,
+        rotation,
+        inkLists,
+        borderStyle,
+        popupRef
+      }
+    } = this;
+    const {
+      transform,
+      width,
+      height
+    } = this.#getTransform(rotation, rect);
+    const svg = this.svgFactory.create(width, height, true);
+    const g = this.#polylinesGroupElement = this.svgFactory.createElement("svg:g");
+    svg.append(g);
+    g.setAttribute("stroke-width", borderStyle.width || 1);
+    g.setAttribute("stroke-linecap", "round");
+    g.setAttribute("stroke-linejoin", "round");
+    g.setAttribute("stroke-miterlimit", 10);
+    g.setAttribute("stroke", "transparent");
+    g.setAttribute("fill", "transparent");
+    g.setAttribute("transform", transform);
+    for (const inkList of inkLists) {
+      const polyline = this.svgFactory.createElement(this.svgElementName);
+      this.#polylines.push(polyline);
+      polyline.setAttribute("points", inkList.join(","));
+      g.append(polyline);
+    }
+    if (!popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this.container.append(svg);
+    this._editOnDoubleClick();
+    return this.container;
+  }
+  updateEdited(params) {
+    super.updateEdited(params);
+    const {
+      thickness,
+      points,
+      rect
+    } = params;
+    const g = this.#polylinesGroupElement;
+    if (thickness >= 0) {
+      g.setAttribute("stroke-width", thickness || 1);
+    }
+    if (points) {
+      for (let i = 0, ii = this.#polylines.length; i < ii; i++) {
+        this.#polylines[i].setAttribute("points", points[i].join(","));
+      }
+    }
+    if (rect) {
+      const {
+        transform,
+        width,
+        height
+      } = this.#getTransform(this.data.rotation, rect);
+      const root = g.parentElement;
+      root.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      g.setAttribute("transform", transform);
+    }
+  }
+  getElementsToTriggerPopup() {
+    return this.#polylines;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
+}
+class HighlightAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true,
+      createQuadrilaterals: true
+    });
+    this.annotationEditorType = AnnotationEditorType.HIGHLIGHT;
+  }
+  render() {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this.container.classList.add("highlightAnnotation");
+    this._editOnDoubleClick();
+    if (overlaidText) {
+      const mark = document.createElement("mark");
+      mark.classList.add("overlaidText");
+      mark.textContent = overlaidText;
+      this.container.append(mark);
+    }
+    return this.container;
+  }
+}
+class UnderlineAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true,
+      createQuadrilaterals: true
+    });
+  }
+  render() {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this.container.classList.add("underlineAnnotation");
+    if (overlaidText) {
+      const underline = document.createElement("u");
+      underline.classList.add("overlaidText");
+      underline.textContent = overlaidText;
+      this.container.append(underline);
+    }
+    return this.container;
+  }
+}
+class SquigglyAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true,
+      createQuadrilaterals: true
+    });
+  }
+  render() {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this.container.classList.add("squigglyAnnotation");
+    if (overlaidText) {
+      const underline = document.createElement("u");
+      underline.classList.add("overlaidText");
+      underline.textContent = overlaidText;
+      this.container.append(underline);
+    }
+    return this.container;
+  }
+}
+class StrikeOutAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true,
+      createQuadrilaterals: true
+    });
+  }
+  render() {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this.container.classList.add("strikeoutAnnotation");
+    if (overlaidText) {
+      const strikeout = document.createElement("s");
+      strikeout.classList.add("overlaidText");
+      strikeout.textContent = overlaidText;
+      this.container.append(strikeout);
+    }
+    return this.container;
+  }
+}
+class StampAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+    this.annotationEditorType = AnnotationEditorType.STAMP;
+  }
+  render() {
+    this.container.classList.add("stampAnnotation");
+    this.container.setAttribute("role", "img");
+    if (!this.data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this._editOnDoubleClick();
+    return this.container;
+  }
+}
+class FileAttachmentAnnotationElement extends AnnotationElement {
+  #trigger = null;
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true
+    });
+    const {
+      fileId,
+      file
+    } = this.data;
+    this.filename = file.filename;
+    this.content = file.content;
+    this.fileId = fileId;
+    this.linkService.eventBus?.dispatch("fileattachmentannotation", {
+      source: this,
+      attachmentId: this.fileId,
+      ...file
+    });
+  }
+  render() {
+    this.container.classList.add("fileAttachmentAnnotation");
+    const {
+      container,
+      data
+    } = this;
+    let trigger;
+    if (data.hasAppearance || data.fillAlpha === 0) {
+      trigger = document.createElement("div");
+    } else {
+      trigger = document.createElement("img");
+      trigger.src = `${this.imageResourcesPath}annotation-${/paperclip/i.test(data.name) ? "paperclip" : "pushpin"}.svg`;
+      if (data.fillAlpha && data.fillAlpha < 1) {
+        trigger.style = `filter: opacity(${Math.round(data.fillAlpha * 100)}%);`;
+      }
+    }
+    trigger.addEventListener("dblclick", this.#download.bind(this));
+    this.#trigger = trigger;
+    const {
+      isMac
+    } = FeatureTest.platform;
+    container.addEventListener("keydown", evt => {
+      if (evt.key === "Enter" && (isMac ? evt.metaKey : evt.ctrlKey)) {
+        this.#download();
+      }
+    });
+    if (!data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    } else {
+      trigger.classList.add("popupTriggerArea");
+    }
+    container.append(trigger);
+    return container;
+  }
+  getElementsToTriggerPopup() {
+    return this.#trigger;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
+  async #download() {
+    const {
+      fileId,
+      filename,
+      content: fallbackContent
+    } = this;
+    const content = (await this.linkService.getAttachmentContent(fileId)) || fallbackContent;
+    if (content) {
+      this.downloadManager?.openOrDownloadData(content, filename);
+    }
+  }
+}
+class MediaAnnotationElement extends AnnotationElement {
+  #abortController = new AbortController();
+  #contentUrl = null;
+  #media = null;
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: !!parameters.data.richMedia
+    });
+  }
+  render() {
+    this.container.classList.add("mediaAnnotation");
+    const {
+      filename
+    } = this.data.richMedia;
+    const button = document.createElement("button");
+    button.className = "mediaPlayButton";
+    button.type = "button";
+    button.title = button.ariaLabel = filename;
+    button.addEventListener("click", () => this.#load(button), {
+      signal: this.#abortController.signal
+    });
+    this.container.append(button);
+    return this.container;
+  }
+  async #load(button) {
+    const {
+      fileId,
+      filename,
+      contentType
+    } = this.data.richMedia;
+    button.disabled = true;
+    let content;
+    try {
+      content = await this.linkService.getAttachmentContent(fileId);
+    } catch {
+      return;
+    } finally {
+      button.disabled = false;
+    }
+    if (!content || !button.isConnected) {
+      return;
+    }
+    const {
+      signal
+    } = this.#abortController;
+    const blob = new Blob([content], {
+      type: contentType
+    });
+    if (!/^(?:video|audio)\//.test(blob.type)) {
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    this.#contentUrl = url;
+    const isAudio = blob.type.startsWith("audio/");
+    const media = document.createElement(isAudio ? "audio" : "video");
+    this.#media = media;
+    media.className = "mediaContent";
+    this._setBackgroundColor(media);
+    media.src = url;
+    media.title = filename;
+    media.controls = true;
+    media.autoplay = true;
+    media.tabIndex = 0;
+    if (isAudio) {
+      let hovered = false;
+      let focused = false;
+      const updateControls = () => {
+        media.controls = hovered || focused;
+      };
+      this.container.addEventListener("pointerenter", () => {
+        hovered = true;
+        updateControls();
+      }, {
+        signal
+      });
+      this.container.addEventListener("pointerleave", () => {
+        hovered = false;
+        updateControls();
+      }, {
+        signal
+      });
+      this.container.addEventListener("focusin", () => {
+        focused = true;
+        updateControls();
+      }, {
+        signal
+      });
+      this.container.addEventListener("focusout", () => {
+        focused = false;
+        updateControls();
+      }, {
+        signal
+      });
+    }
+    media.addEventListener("emptied", () => this.#revokeContentUrl(url), {
+      once: true,
+      signal
+    });
+    button.replaceWith(media);
+    media.play().catch(() => {});
+  }
+  #revokeContentUrl(url = this.#contentUrl) {
+    if (url && url === this.#contentUrl) {
+      URL.revokeObjectURL(url);
+      this.#contentUrl = null;
+    }
+  }
+  destroy() {
+    this.#abortController.abort();
+    if (this.#media) {
+      this.#media.pause();
+      this.#media.removeAttribute("src");
+      this.#media.load();
+      this.#media = null;
+    }
+    this.#revokeContentUrl();
+  }
+}
+class AnnotationLayer {
+  #accessibilityManager = null;
+  #annotationCanvasMap = null;
+  #annotationStorage = null;
+  #editableAnnotations = new Map();
+  #structTreeLayer = null;
+  #linkService = null;
+  #elements = [];
+  #hasAriaAttributesFromStructTree = false;
+  zIndex = 0;
+  constructor({
+    div,
+    accessibilityManager,
+    annotationCanvasMap,
+    annotationEditorUIManager,
+    page,
+    viewport,
+    structTreeLayer,
+    commentManager,
+    linkService,
+    annotationStorage
+  }) {
+    this.div = div;
+    this.#accessibilityManager = accessibilityManager;
+    this.#annotationCanvasMap = annotationCanvasMap;
+    this.#structTreeLayer = structTreeLayer || null;
+    this.#linkService = linkService || null;
+    this.#annotationStorage = annotationStorage || new AnnotationStorage();
+    this.page = page;
+    this.viewport = viewport;
+    this._annotationEditorUIManager = annotationEditorUIManager;
+    this._commentManager = commentManager || null;
+  }
+  hasEditableAnnotations() {
+    return this.#editableAnnotations.size > 0;
+  }
+  async render(params) {
+    const {
+      annotations,
+      optionalContentConfig
+    } = params;
+    const layer = this.div;
+    setLayerDimensions(layer, this.viewport);
+    const popupToElements = new Map();
+    const popupAnnotations = [];
+    const elementParams = {
+      data: null,
+      layer,
+      linkService: this.#linkService,
+      downloadManager: params.downloadManager,
+      imageResourcesPath: params.imageResourcesPath || "",
+      renderForms: params.renderForms !== false,
+      svgFactory: new DOMSVGFactory(),
+      annotationStorage: this.#annotationStorage,
+      enableComment: params.enableComment === true,
+      enableScripting: params.enableScripting === true,
+      hasJSActions: params.hasJSActions,
+      fieldObjects: params.fieldObjects,
+      parent: this,
+      elements: null
+    };
+    for (const data of annotations) {
+      if (data.noHTML) {
+        continue;
+      }
+      const isPopupAnnotation = data.annotationType === AnnotationType.POPUP;
+      if (!isPopupAnnotation) {
+        if (data.rect[2] === data.rect[0] || data.rect[3] === data.rect[1]) {
+          continue;
+        }
+      } else {
+        const elements = popupToElements.get(data.id);
+        if (!elements) {
+          continue;
+        }
+        if (!this._commentManager) {
+          popupAnnotations.push(data);
+          continue;
+        }
+        elementParams.elements = elements;
+      }
+      elementParams.data = data;
+      const element = AnnotationElementFactory.create(elementParams);
+      if (!element.isRenderable) {
+        continue;
+      }
+      if (!isPopupAnnotation) {
+        this.#elements.push(element);
+        if (data.popupRef) {
+          popupToElements.getOrInsertComputed(data.popupRef, makeArr).push(element);
+        }
+      }
+      const rendered = element.render();
+      if (data.hidden) {
+        rendered.style.visibility = "hidden";
+      }
+      element.updateOC(optionalContentConfig);
+      if (element._isEditable) {
+        this.#editableAnnotations.set(element.data.id, element);
+        this._annotationEditorUIManager?.renderAnnotationElement(element);
+      }
+    }
+    await this.#addElementsToDOM();
+    for (const data of popupAnnotations) {
+      const elements = elementParams.elements = popupToElements.get(data.id);
+      elementParams.data = data;
+      const element = AnnotationElementFactory.create(elementParams);
+      if (!element.isRenderable) {
+        continue;
+      }
+      const rendered = element.render();
+      element.contentElement.id = `${AnnotationPrefix}${data.id}`;
+      if (data.hidden) {
+        rendered.style.visibility = "hidden";
+      }
+      elements.at(-1).container.after(rendered);
+    }
+    this.#setAnnotationCanvasMap();
+  }
+  async #addElementsToDOM() {
+    if (this.#elements.length === 0) {
+      return;
+    }
+    this.div.replaceChildren();
+    const promises = [];
+    if (!this.#hasAriaAttributesFromStructTree) {
+      this.#hasAriaAttributesFromStructTree = true;
+      for (const {
+        contentElement,
+        data: {
+          hidden,
+          id,
+          oc
+        }
+      } of this.#elements) {
+        const annotationId = contentElement.id = `${AnnotationPrefix}${id}`;
+        const enableLinkOwnership = contentElement.localName === "a" && !hidden && !oc;
+        promises.push(this.#structTreeLayer?.getAriaAttributes(annotationId, {
+          enableLinkOwnership
+        }).then(ariaAttributes => {
+          if (ariaAttributes) {
+            for (const [key, value] of ariaAttributes) {
+              contentElement.setAttribute(key, value);
+            }
+          }
+        }));
+      }
+    }
+    this.#elements.sort(({
+      data: {
+        rect: [a0, a1, a2, a3]
+      }
+    }, {
+      data: {
+        rect: [b0, b1, b2, b3]
+      }
+    }) => {
+      if (a0 === a2 && a1 === a3) {
+        return +1;
+      }
+      if (b0 === b2 && b1 === b3) {
+        return -1;
+      }
+      const top1 = a3;
+      const bot1 = a1;
+      const mid1 = (a1 + a3) / 2;
+      const top2 = b3;
+      const bot2 = b1;
+      const mid2 = (b1 + b3) / 2;
+      if (mid1 >= top2 && mid2 <= bot1) {
+        return -1;
+      }
+      if (mid2 >= top1 && mid1 <= bot2) {
+        return +1;
+      }
+      const centerX1 = (a0 + a2) / 2;
+      const centerX2 = (b0 + b2) / 2;
+      return centerX1 - centerX2;
+    });
+    const fragment = document.createDocumentFragment();
+    for (const element of this.#elements) {
+      fragment.append(element.container);
+      if (this._commentManager) {
+        (element.extraPopupElement?.popup || element.popup)?.renderCommentButton();
+      } else if (element.extraPopupElement) {
+        fragment.append(element.extraPopupElement.render());
+      }
+    }
+    this.div.append(fragment);
+    await Promise.all(promises);
+    if (this.#accessibilityManager) {
+      const annotationIds = await this.#structTreeLayer?.getAnnotationIds();
+      for (const {
+        contentElement
+      } of this.#elements) {
+        if (annotationIds?.has(contentElement.id)) {
+          continue;
+        }
+        this.#accessibilityManager.addPointerInTextLayer(contentElement, false);
+      }
+    }
+  }
+  async addLinkAnnotations(annotations) {
+    const elementParams = {
+      data: null,
+      layer: this.div,
+      linkService: this.#linkService,
+      svgFactory: new DOMSVGFactory(),
+      parent: this
+    };
+    for (const data of annotations) {
+      data.borderStyle ||= AnnotationLayer._defaultBorderStyle;
+      elementParams.data = data;
+      const element = AnnotationElementFactory.create(elementParams);
+      if (!element.isRenderable) {
+        continue;
+      }
+      element.render();
+      element.contentElement.id = `${AnnotationPrefix}${data.id}`;
+      this.#elements.push(element);
+    }
+    await this.#addElementsToDOM();
+  }
+  update({
+    viewport,
+    optionalContentConfig
+  }) {
+    const layer = this.div;
+    this.viewport = viewport;
+    setLayerDimensions(layer, {
+      rotation: viewport.rotation
+    });
+    for (const element of this.#elements) {
+      element.updateOC(optionalContentConfig);
+    }
+    this.#setAnnotationCanvasMap();
+    layer.hidden = false;
+  }
+  destroy() {
+    for (const element of this.#elements) {
+      element.destroy?.();
+      this.#accessibilityManager?.removePointerInTextLayer(element.contentElement);
+    }
+    this.#elements.length = 0;
+    this.#editableAnnotations.clear();
+    this.div.replaceChildren();
+  }
+  #setAnnotationCanvasMap() {
+    if (!this.#annotationCanvasMap) {
+      return;
+    }
+    const layer = this.div;
+    for (const [id, canvas] of this.#annotationCanvasMap) {
+      const element = layer.querySelector(`[data-annotation-id="${id}"]`);
+      if (!element) {
+        continue;
+      }
+      if (Array.isArray(canvas)) {
+        for (const cvs of canvas) {
+          cvs.className = "annotationContent";
+          cvs.ariaHidden = true;
+        }
+      } else {
+        canvas.className = "annotationContent";
+        canvas.ariaHidden = true;
+      }
+      const toRemove = [];
+      for (const child of element.children) {
+        if (child.nodeName === "CANVAS") {
+          toRemove.push(child);
+        }
+      }
+      for (const child of toRemove) {
+        child.remove();
+      }
+      const firstCanvas = Array.isArray(canvas) ? canvas[0] : canvas;
+      const {
+        firstChild
+      } = element;
+      if (!firstChild) {
+        element.append(firstCanvas);
+      } else if (!firstChild.classList.contains("annotationContent")) {
+        firstChild.before(firstCanvas);
+      } else {
+        firstChild.after(firstCanvas);
+      }
+      if (Array.isArray(canvas)) {
+        let lastCanvas = firstCanvas;
+        for (let i = 1, ii = canvas.length; i < ii; i++) {
+          lastCanvas.after(canvas[i]);
+          lastCanvas = canvas[i];
+        }
+      }
+      this.#annotationCanvasMap.delete(id);
+      const editableAnnotation = this.#editableAnnotations.get(id);
+      if (!editableAnnotation) {
+        continue;
+      }
+      if (editableAnnotation._hasNoCanvas) {
+        this._annotationEditorUIManager?.setMissingCanvas(id, element.id, canvas);
+        editableAnnotation._hasNoCanvas = false;
+      } else {
+        editableAnnotation.canvas = canvas;
+      }
+    }
+  }
+  refreshCanvases() {
+    this.#setAnnotationCanvasMap();
+  }
+  getEditableAnnotations() {
+    return this.#editableAnnotations.values();
+  }
+  getEditableAnnotation(id) {
+    return this.#editableAnnotations.get(id);
+  }
+  addFakeAnnotation(editor) {
+    const {
+      div
+    } = this;
+    const {
+      id,
+      rotation
+    } = editor;
+    const element = new EditorAnnotationElement({
+      data: {
+        id,
+        rect: editor.getPDFRect(),
+        rotation
+      },
+      editor,
+      layer: div,
+      parent: this,
+      enableComment: !!this._commentManager,
+      linkService: this.#linkService,
+      annotationStorage: this.#annotationStorage
+    });
+    element.render();
+    element.contentElement.id = `${AnnotationPrefix}${id}`;
+    element.createOrUpdatePopup();
+    this.#elements.push(element);
+    return element;
+  }
+  removeAnnotation(id) {
+    const index = this.#elements.findIndex(el => el.data.id === id);
+    if (index < 0) {
+      return;
+    }
+    const [element] = this.#elements.splice(index, 1);
+    this.#accessibilityManager?.removePointerInTextLayer(element.contentElement);
+  }
+  updateFakeAnnotations(editors) {
+    if (editors.length === 0) {
+      return;
+    }
+    for (const editor of editors) {
+      editor.updateFakeAnnotationElement(this);
+    }
+    this.#addElementsToDOM();
+  }
+  togglePointerEvents(enabled = false) {
+    this.div.classList.toggle("disabled", !enabled);
+  }
+  static get _defaultBorderStyle() {
+    return util_shadow(this, "_defaultBorderStyle", Object.freeze({
+      width: 1,
+      rawWidth: 1,
+      style: AnnotationBorderStyleType.SOLID,
+      dashArray: [3],
+      horizontalCornerRadius: 0,
+      verticalCornerRadius: 0
+    }));
+  }
+}
+
+;// ./src/display/editor/freetext.js
+
+
+
+
+
+
+
+
+
+
+const EOL_PATTERN = /\r\n?|\n/g;
+class FreeTextEditor extends AnnotationEditor {
+  #content = "";
+  #editorDivId = `${this.id}-editor`;
+  #editModeAC = null;
+  #fontSize;
+  _colorPicker = null;
+  static _freeTextDefaultContent = "";
+  static _internalPadding = 0;
+  static _defaultColor = null;
+  static _defaultFontSize = 10;
+  static get _keyboardManager() {
+    const proto = FreeTextEditor.prototype;
+    const arrowChecker = self => self.isEmpty();
+    const small = AnnotationEditorUIManager.TRANSLATE_SMALL;
+    const big = AnnotationEditorUIManager.TRANSLATE_BIG;
+    return util_shadow(this, "_keyboardManager", new KeyboardManager([[["ctrl+s", "mac+meta+s", "ctrl+p", "mac+meta+p"], proto.commitOrRemove, {
+      bubbles: true
+    }], [["ctrl+Enter", "mac+meta+Enter"], proto.commitOrRemove], [["Escape"], proto.commitOrRemove], [["ArrowLeft"], proto._translateEmpty, {
+      args: [-small, 0],
+      checker: arrowChecker
+    }], [["ctrl+ArrowLeft", "mac+shift+ArrowLeft"], proto._translateEmpty, {
+      args: [-big, 0],
+      checker: arrowChecker
+    }], [["ArrowRight"], proto._translateEmpty, {
+      args: [small, 0],
+      checker: arrowChecker
+    }], [["ctrl+ArrowRight", "mac+shift+ArrowRight"], proto._translateEmpty, {
+      args: [big, 0],
+      checker: arrowChecker
+    }], [["ArrowUp"], proto._translateEmpty, {
+      args: [0, -small],
+      checker: arrowChecker
+    }], [["ctrl+ArrowUp", "mac+shift+ArrowUp"], proto._translateEmpty, {
+      args: [0, -big],
+      checker: arrowChecker
+    }], [["ArrowDown"], proto._translateEmpty, {
+      args: [0, small],
+      checker: arrowChecker
+    }], [["ctrl+ArrowDown", "mac+shift+ArrowDown"], proto._translateEmpty, {
+      args: [0, big],
+      checker: arrowChecker
+    }]]));
+  }
+  static _type = "freetext";
+  static _editorType = AnnotationEditorType.FREETEXT;
+  constructor(params) {
+    super({
+      ...params,
+      name: "freeTextEditor"
+    });
+    this.color = params.color || FreeTextEditor._defaultColor || AnnotationEditor._defaultLineColor;
+    this.#fontSize = params.fontSize || FreeTextEditor._defaultFontSize;

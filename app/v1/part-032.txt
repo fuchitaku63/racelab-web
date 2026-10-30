@@ -1,0 +1,1000 @@
+        } else if (y1 === firstPointY) {
+          firstPointX = Math.max(firstPointX, x);
+        }
+      } else if (left && !isLTR) {
+        if (y1 < firstPointY) {
+          firstPointY = y1;
+          firstPointX = x;
+        } else if (y1 === firstPointY) {
+          firstPointX = Math.min(firstPointX, x);
+        }
+      }
+      edge[0] = (x - shiftedMinX) / bboxWidth;
+      edge[1] = (y1 - shiftedMinY) / bboxHeight;
+      edge[2] = (y2 - shiftedMinY) / bboxHeight;
+    }
+    this.#box = new Float32Array([shiftedMinX, shiftedMinY, bboxWidth, bboxHeight]);
+    this.#firstPoint = [firstPointX, firstPointY];
+    this.#lastPoint = lastPoint;
+  }
+  getOutlines() {
+    this.#verticalEdges.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    const outlineVerticalEdges = [];
+    for (const edge of this.#verticalEdges) {
+      if (edge[3]) {
+        outlineVerticalEdges.push(...this.#breakEdge(edge));
+        this.#insert(edge);
+      } else {
+        this.#remove(edge);
+        outlineVerticalEdges.push(...this.#breakEdge(edge));
+      }
+    }
+    return this.#getOutlines(outlineVerticalEdges);
+  }
+  #getOutlines(outlineVerticalEdges) {
+    const edges = [];
+    const allEdges = new Set();
+    for (const edge of outlineVerticalEdges) {
+      const [x, y1, y2] = edge;
+      edges.push([x, y1, edge], [x, y2, edge]);
+    }
+    edges.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    for (let i = 0, ii = edges.length; i < ii; i += 2) {
+      const edge1 = edges[i][2];
+      const edge2 = edges[i + 1][2];
+      edge1.push(edge2);
+      edge2.push(edge1);
+      allEdges.add(edge1);
+      allEdges.add(edge2);
+    }
+    const outlines = [];
+    while (allEdges.size > 0) {
+      const edge = allEdges.values().next().value;
+      let [x, y1, y2, edge1, edge2] = edge;
+      allEdges.delete(edge);
+      let lastPointX = x;
+      let lastPointY = y1;
+      const outline = [x, y2];
+      outlines.push(outline);
+      while (true) {
+        let e;
+        if (allEdges.has(edge1)) {
+          e = edge1;
+        } else if (allEdges.has(edge2)) {
+          e = edge2;
+        } else {
+          break;
+        }
+        allEdges.delete(e);
+        [x, y1, y2, edge1, edge2] = e;
+        if (lastPointX !== x) {
+          outline.push(lastPointX, lastPointY, x, lastPointY === y1 ? y1 : y2);
+          lastPointX = x;
+        }
+        lastPointY = lastPointY === y1 ? y2 : y1;
+      }
+      outline.push(lastPointX, lastPointY);
+    }
+    return new HighlightOutline(outlines, this.#box, this.#firstPoint, this.#lastPoint);
+  }
+  #binarySearch(y) {
+    const array = this.#intervals;
+    let start = 0;
+    let end = array.length - 1;
+    while (start <= end) {
+      const middle = start + end >> 1;
+      const y1 = array[middle][0];
+      if (y1 === y) {
+        return middle;
+      }
+      if (y1 < y) {
+        start = middle + 1;
+      } else {
+        end = middle - 1;
+      }
+    }
+    return end + 1;
+  }
+  #insert([, y1, y2]) {
+    const index = this.#binarySearch(y1);
+    this.#intervals.splice(index, 0, [y1, y2]);
+  }
+  #remove([, y1, y2]) {
+    const index = this.#binarySearch(y1);
+    for (let i = index; i < this.#intervals.length; i++) {
+      const [start, end] = this.#intervals[i];
+      if (start !== y1) {
+        break;
+      }
+      if (start === y1 && end === y2) {
+        this.#intervals.splice(i, 1);
+        return;
+      }
+    }
+    for (let i = index - 1; i >= 0; i--) {
+      const [start, end] = this.#intervals[i];
+      if (start !== y1) {
+        break;
+      }
+      if (start === y1 && end === y2) {
+        this.#intervals.splice(i, 1);
+        return;
+      }
+    }
+  }
+  #breakEdge(edge) {
+    const [x, y1, y2] = edge;
+    const results = [[x, y1, y2]];
+    const index = this.#binarySearch(y2);
+    for (let i = 0; i < index; i++) {
+      const [start, end] = this.#intervals[i];
+      for (let j = 0, jj = results.length; j < jj; j++) {
+        const [, y3, y4] = results[j];
+        if (end <= y3 || y4 <= start) {
+          continue;
+        }
+        if (y3 >= start) {
+          if (y4 > end) {
+            results[j][1] = end;
+          } else {
+            if (jj === 1) {
+              return [];
+            }
+            results.splice(j, 1);
+            j--;
+            jj--;
+          }
+          continue;
+        }
+        results[j][2] = start;
+        if (y4 > end) {
+          results.push([x, end, y4]);
+        }
+      }
+    }
+    return results;
+  }
+}
+class HighlightOutline extends Outline {
+  #box;
+  #boxes = null;
+  #outlines;
+  constructor(outlines, box, firstPoint, lastPoint) {
+    super();
+    this.#outlines = outlines;
+    this.#box = box;
+    this.firstPoint = firstPoint;
+    this.lastPoint = lastPoint;
+  }
+  static build(boxes, isLTR) {
+    const outline = new HighlightOutliner(boxes, 0.001).getOutlines();
+    outline.#boxes = boxes;
+    outline.focusOutline = new HighlightOutliner(boxes, 0.0025, 0.001, isLTR).getOutlines();
+    return outline;
+  }
+  get isFree() {
+    return false;
+  }
+  get defaultSVGProperties() {
+    return getHighlightSVGProperties(this);
+  }
+  getFocusSVGProperties(rotation) {
+    return getHighlightFocusSVGProperties(this, rotation);
+  }
+  updateRotation(rotation) {
+    return {
+      root: {
+        "data-main-rotation": rotation
+      }
+    };
+  }
+  serializeQuadPoints([pageX, pageY], [pageWidth, pageHeight]) {
+    const boxes = this.#boxes;
+    const quadPoints = new Float32Array(boxes.length * 8);
+    let i = 0;
+    for (const {
+      x,
+      y,
+      width,
+      height
+    } of boxes) {
+      const sx = x * pageWidth + pageX;
+      const sy = (1 - y) * pageHeight + pageY;
+      quadPoints[i] = quadPoints[i + 4] = sx;
+      quadPoints[i + 1] = quadPoints[i + 3] = sy;
+      quadPoints[i + 2] = quadPoints[i + 6] = sx + width * pageWidth;
+      quadPoints[i + 5] = quadPoints[i + 7] = sy - height * pageHeight;
+      i += 8;
+    }
+    return quadPoints;
+  }
+  toSVGPath() {
+    const buffer = [];
+    for (const polygon of this.#outlines) {
+      let [prevX, prevY] = polygon;
+      buffer.push(`M${prevX} ${prevY}`);
+      for (let i = 2; i < polygon.length; i += 2) {
+        const x = polygon[i];
+        const y = polygon[i + 1];
+        if (x === prevX) {
+          buffer.push(`V${y}`);
+          prevY = y;
+        } else if (y === prevY) {
+          buffer.push(`H${x}`);
+          prevX = x;
+        }
+      }
+      buffer.push("Z");
+    }
+    return buffer.join(" ");
+  }
+  serialize([blX, blY, trX, trY], _rotation) {
+    const outlines = [];
+    const width = trX - blX;
+    const height = trY - blY;
+    for (const outline of this.#outlines) {
+      const points = new Array(outline.length);
+      for (let i = 0; i < outline.length; i += 2) {
+        points[i] = blX + outline[i] * width;
+        points[i + 1] = trY - outline[i + 1] * height;
+      }
+      outlines.push(points);
+    }
+    return outlines;
+  }
+  get box() {
+    return this.#box;
+  }
+}
+class FreeHighlightOutliner extends FreeDrawOutliner {
+  newFreeDrawOutline(outline, points, box, scaleFactor, innerMargin, isLTR) {
+    return new FreeHighlightOutline(outline, points, box, scaleFactor, innerMargin, isLTR);
+  }
+}
+class FreeHighlightDrawer {
+  #outliner;
+  #thickness;
+  constructor(x, y, box, scaleFactor, thickness, isLTR, innerMargin) {
+    this.#outliner = new FreeHighlightOutliner(x, y, box, scaleFactor, thickness, isLTR, innerMargin);
+    this.#thickness = thickness;
+  }
+  add(x, y) {
+    return this.#outliner.add(x, y) ? {
+      path: {
+        d: this.#outliner.toSVGPath()
+      }
+    } : null;
+  }
+  addPoints(points) {
+    let hasChanged = false;
+    for (let i = 0, ii = points.length; i < ii; i += 2) {
+      hasChanged = this.#outliner.add(points[i], points[i + 1]) || hasChanged;
+    }
+    return hasChanged ? {
+      path: {
+        d: this.#outliner.toSVGPath()
+      }
+    } : null;
+  }
+  end(x, y) {
+    return x === undefined ? null : this.add(x, y);
+  }
+  isEmpty() {
+    return this.#outliner.isEmpty();
+  }
+  isCancellable() {
+    return this.#outliner.isCancellable();
+  }
+  removeLastElement() {
+    return this.#outliner.removeLastElement();
+  }
+  updateProperty(_name, _value) {
+    return null;
+  }
+  getOutlines() {
+    const outlines = this.#outliner.getOutlines();
+    outlines.buildFocusOutline(2 * this.#thickness);
+    return outlines;
+  }
+  get defaultSVGProperties() {
+    return {
+      bbox: [0, 0, 1, 1],
+      root: {
+        viewBox: "0 0 1 1"
+      },
+      rootClass: {
+        highlight: true,
+        free: true
+      },
+      path: {
+        d: this.#outliner.toSVGPath()
+      }
+    };
+  }
+}
+class FreeHighlightOutline extends FreeDrawOutline {
+  static #EXTRA_THICKNESS = 1.5;
+  newOutliner(x, y, box, scaleFactor, thickness, isLTR, innerMargin = 0) {
+    return new FreeHighlightOutliner(x, y, box, scaleFactor, thickness, isLTR, innerMargin);
+  }
+  get isFree() {
+    return true;
+  }
+  buildFocusOutline(thickness) {
+    this.focusOutline = this.getNewOutline(thickness / 2 + FreeHighlightOutline.#EXTRA_THICKNESS, 0.0025);
+  }
+  get defaultSVGProperties() {
+    return getHighlightSVGProperties(this);
+  }
+  getFocusSVGProperties(rotation) {
+    return getHighlightFocusSVGProperties(this, rotation);
+  }
+  get focusMustRemoveSelfIntersections() {
+    return true;
+  }
+  updateRotation(rotation) {
+    return {
+      root: {
+        "data-main-rotation": rotation
+      }
+    };
+  }
+  updateProperty(name, value) {
+    if (name !== "thickness") {
+      return null;
+    }
+    const bbox = this.updateThickness(value / 2);
+    this.buildFocusOutline(value);
+    return bbox;
+  }
+  getPathResizedSVGProperties() {
+    return {
+      path: {
+        d: this.toSVGPath()
+      }
+    };
+  }
+}
+
+;// ./src/display/editor/highlight.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+class HighlightDrawingOptions extends DrawingOptions {
+  constructor(properties = null) {
+    super();
+    super.updateProperties(properties);
+  }
+  updateSVGProperty(name, value) {
+    if (name !== "thickness") {
+      super.updateSVGProperty(name, value);
+    }
+  }
+  clone() {
+    const clone = new HighlightDrawingOptions();
+    clone.updateAll(this);
+    return clone;
+  }
+}
+class HighlightEditor extends DrawingEditor {
+  #anchorNode = null;
+  #anchorOffset = 0;
+  #focusNode = null;
+  #focusOffset = 0;
+  #methodOfCreation = "";
+  #text = "";
+  static _DEFAULT_OPACITY = 1;
+  static _DEFAULT_THICKNESS = 12;
+  static _defaultDrawingOptions = null;
+  static _type = "highlight";
+  static _editorType = AnnotationEditorType.HIGHLIGHT;
+  static get _keyboardManager() {
+    const proto = HighlightEditor.prototype;
+    return util_shadow(this, "_keyboardManager", new KeyboardManager([[["ArrowLeft"], proto._moveCaret, {
+      args: [0]
+    }], [["ArrowRight"], proto._moveCaret, {
+      args: [1]
+    }], [["ArrowUp"], proto._moveCaret, {
+      args: [2]
+    }], [["ArrowDown"], proto._moveCaret, {
+      args: [3]
+    }]]));
+  }
+  constructor(params) {
+    super({
+      ...params,
+      name: "highlightEditor"
+    });
+    this.#anchorNode = params.anchorNode || null;
+    this.#anchorOffset = params.anchorOffset || 0;
+    this.#focusNode = params.focusNode || null;
+    this.#focusOffset = params.focusOffset || 0;
+    this.#methodOfCreation = params.methodOfCreation || (this._drawOutlines?.isFree ? "main_toolbar" : "");
+    this.#text = params.text || "";
+    this._isDraggable = false;
+    this.defaultL10nId = "pdfjs-editor-highlight-editor";
+    this.rotate();
+  }
+  static initialize(l10n, uiManager) {
+    AnnotationEditor.initialize(l10n, uiManager);
+    this._defaultDrawingOptions ||= new HighlightDrawingOptions({
+      fill: uiManager.highlightColors?.values().next().value || "#fff066",
+      "fill-opacity": HighlightEditor._DEFAULT_OPACITY,
+      thickness: HighlightEditor._DEFAULT_THICKNESS
+    });
+  }
+  static getDefaultDrawingOptions(options) {
+    const clone = this._defaultDrawingOptions.clone();
+    clone.updateProperties(options);
+    return clone;
+  }
+  static get typesMap() {
+    return util_shadow(this, "typesMap", new Map([[AnnotationEditorParamsType.HIGHLIGHT_COLOR, "fill"], [AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, "thickness"]]));
+  }
+  static get isDrawer() {
+    return false;
+  }
+  static get _hasClipPath() {
+    return true;
+  }
+  static get _hasDrawClass() {
+    return false;
+  }
+  _addOutlines(params) {
+    const {
+      boxes,
+      drawOutlines
+    } = params;
+    if (!boxes && !drawOutlines) {
+      return;
+    }
+    this._drawingOptions ||= params.drawingOptions || HighlightEditor.getDefaultDrawingOptions();
+    if (boxes) {
+      params = {
+        ...params,
+        drawOutlines: HighlightOutline.build(boxes, this._uiManager.direction === "ltr")
+      };
+    }
+    super._addOutlines(params);
+  }
+  get colorType() {
+    return AnnotationEditorParamsType.HIGHLIGHT_COLOR;
+  }
+  get color() {
+    return this._drawingOptions.fill;
+  }
+  get opacity() {
+    return this._drawingOptions["fill-opacity"];
+  }
+  get _opacityName() {
+    return "fill-opacity";
+  }
+  get _drawRotation() {
+    return this._drawOutlines?.isFree ? this.rotation : 0;
+  }
+  get isResizable() {
+    return false;
+  }
+  get _mustBeDisabledOnCommit() {
+    return false;
+  }
+  get _mustFixPosition() {
+    return !this._drawOutlines?.isFree;
+  }
+  get telemetryInitialData() {
+    return {
+      action: "added",
+      type: this._drawOutlines.isFree ? "free_highlight" : "highlight",
+      color: this._uiManager.getNonHCMColorName(this.color),
+      thickness: this._drawingOptions.thickness,
+      methodOfCreation: this.#methodOfCreation
+    };
+  }
+  get telemetryFinalData() {
+    return {
+      type: "highlight",
+      color: this._uiManager.getNonHCMColorName(this.color)
+    };
+  }
+  static computeTelemetryFinalData(data) {
+    return {
+      numberOfColors: data.get("color").size
+    };
+  }
+  translateInPage(x, y) {}
+  get toolbarPosition() {
+    return this.#relativeToBox(this._drawOutlines.focusOutline.lastPoint);
+  }
+  get commentButtonPosition() {
+    return this.#relativeToBox(this._drawOutlines.firstPoint);
+  }
+  #relativeToBox([pointX, pointY]) {
+    const [x, y, width, height] = this._drawOutlines.box;
+    return [(pointX - x) / width, (pointY - y) / height];
+  }
+  updateParams(type, value) {
+    switch (type) {
+      case AnnotationEditorParamsType.HIGHLIGHT_COLOR:
+        this._updateColorAndOpacity(value, HighlightEditor._DEFAULT_OPACITY, type);
+        this._reportTelemetry({
+          action: "color_changed",
+          color: this._uiManager.getNonHCMColorName(value)
+        }, true);
+        break;
+      case AnnotationEditorParamsType.HIGHLIGHT_THICKNESS:
+        super.updateParams(type, value);
+        this._reportTelemetry({
+          action: "thickness_changed",
+          thickness: value
+        }, true);
+        break;
+    }
+  }
+  get propertiesToUpdate() {
+    const properties = super.propertiesToUpdate;
+    properties.push([AnnotationEditorParamsType.HIGHLIGHT_FREE, this._drawOutlines.isFree]);
+    return properties;
+  }
+  get toolbarButtons() {
+    if (this._uiManager.highlightColors) {
+      this._colorPicker = new ColorPicker({
+        editor: this
+      });
+      return [["colorPicker", this._colorPicker]];
+    }
+    return super.toolbarButtons;
+  }
+  fixAndSetPosition() {
+    return super.fixAndSetPosition(this._drawRotation);
+  }
+  getRect(tx, ty) {
+    return super.getRect(tx, ty, this._drawRotation);
+  }
+  onceAdded(focus) {
+    if (!this.annotationElementId) {
+      this.parent.addUndoableEditor(this);
+    }
+    if (focus) {
+      this.div.focus();
+    }
+  }
+  remove() {
+    this._reportTelemetry({
+      action: "deleted"
+    });
+    super.remove();
+  }
+  render() {
+    if (this.div) {
+      return this.div;
+    }
+    const div = super.render();
+    if (this.#text) {
+      div.setAttribute("aria-label", this.#text);
+      div.setAttribute("role", "mark");
+    }
+    if (this._drawOutlines.isFree) {
+      div.classList.add("free");
+    } else {
+      div.addEventListener("keydown", this.#keydown.bind(this), {
+        signal: this._uiManager._signal
+      });
+    }
+    this.enableEditing();
+    return div;
+  }
+  #keydown(event) {
+    HighlightEditor._keyboardManager.exec(this, event);
+  }
+  _moveCaret(direction) {
+    this.parent.unselect(this);
+    switch (direction) {
+      case 0:
+      case 2:
+        this.#setCaret(true);
+        break;
+      case 1:
+      case 3:
+        this.#setCaret(false);
+        break;
+    }
+  }
+  #setCaret(start) {
+    if (!this.#anchorNode) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (start) {
+      selection.setPosition(this.#anchorNode, this.#anchorOffset);
+    } else {
+      selection.setPosition(this.#focusNode, this.#focusOffset);
+    }
+  }
+  unselect() {
+    super.unselect();
+    if (!this._drawOutlines.isFree) {
+      this.#setCaret(false);
+    }
+  }
+  static createDrawerInstance({
+    x,
+    y,
+    box,
+    parent,
+    isLTR
+  }) {
+    return new FreeHighlightDrawer(x, y, box, parent.scale, this._defaultDrawingOptions.thickness / 2, isLTR, 0.001);
+  }
+  static _getDrawingTarget(parent, {
+    target
+  }) {
+    return target.closest(".textLayer");
+  }
+  static _getPointerCoords({
+    x,
+    y
+  }) {
+    return [x, y];
+  }
+  static _addDrawingListeners(target, signal) {
+    target.classList.add("free");
+    signal.addEventListener("abort", () => target.classList.remove("free"), {
+      once: true
+    });
+    window.addEventListener("blur", () => this._endDraw(null), {
+      signal
+    });
+    window.addEventListener("pointerdown", stopEvent, {
+      capture: true,
+      passive: false,
+      signal
+    });
+  }
+  static _endDrawingSession(isAborted = false) {
+    return this.endDrawing(isAborted);
+  }
+  createDrawingOptions({
+    color,
+    opacity,
+    thickness
+  }) {
+    const {
+      _defaultDrawingOptions: defaults,
+      _DEFAULT_OPACITY
+    } = HighlightEditor;
+    this._drawingOptions = HighlightEditor.getDefaultDrawingOptions({
+      fill: Util.makeHexColor(...color),
+      "fill-opacity": opacity || _DEFAULT_OPACITY,
+      thickness: thickness || defaults.thickness
+    });
+  }
+  static deserializeDraw(pageX, pageY, pageWidth, pageHeight, _innerMargin, data, uiManager) {
+    const {
+      quadPoints
+    } = data;
+    if (quadPoints) {
+      const boxes = [];
+      for (let i = 0, ii = quadPoints.length; i < ii; i += 8) {
+        boxes.push({
+          x: (quadPoints[i] - pageX) / pageWidth,
+          y: 1 - (quadPoints[i + 1] - pageY) / pageHeight,
+          width: (quadPoints[i + 2] - quadPoints[i]) / pageWidth,
+          height: (quadPoints[i + 1] - quadPoints[i + 5]) / pageHeight
+        });
+      }
+      return HighlightOutline.build(boxes, uiManager.direction === "ltr");
+    }
+    const thickness = data.thickness || this._defaultDrawingOptions.thickness;
+    const points = (data.inkLists || data.outlines.points)[0];
+    const outliner = new FreeHighlightOutliner(points[0] - pageX, pageHeight - (points[1] - pageY), [0, 0, pageWidth, pageHeight], 1, thickness / 2, true, 0.001);
+    for (let i = 0, ii = points.length; i < ii; i += 2) {
+      outliner.add(points[i] - pageX, pageHeight - (points[i + 1] - pageY));
+    }
+    const outlines = outliner.getOutlines();
+    outlines.buildFocusOutline(thickness);
+    return outlines;
+  }
+  static async deserialize(data, parent, uiManager) {
+    let initialData = null;
+    if (data instanceof HighlightAnnotationElement) {
+      const {
+        data: {
+          quadPoints,
+          rect,
+          rotation,
+          id,
+          color,
+          opacity,
+          popupRef,
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
+        },
+        parent: {
+          page: {
+            pageNumber
+          }
+        }
+      } = data;
+      initialData = data = {
+        annotationType: AnnotationEditorType.HIGHLIGHT,
+        color: Array.from(color),
+        opacity,
+        quadPoints,
+        pageIndex: pageNumber - 1,
+        rect: rect.slice(0),
+        rotation,
+        annotationElementId: id,
+        id,
+        deleted: false,
+        popupRef,
+        richText,
+        comment: contentsObj?.str || null,
+        creationDate,
+        modificationDate
+      };
+    } else if (data instanceof InkAnnotationElement) {
+      const {
+        data: {
+          inkLists,
+          rect,
+          rotation,
+          id,
+          color,
+          borderStyle: {
+            rawWidth: thickness
+          },
+          popupRef,
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
+        },
+        parent: {
+          page: {
+            pageNumber
+          }
+        }
+      } = data;
+      initialData = data = {
+        annotationType: AnnotationEditorType.HIGHLIGHT,
+        color: Array.from(color),
+        thickness,
+        inkLists,
+        pageIndex: pageNumber - 1,
+        rect: rect.slice(0),
+        rotation,
+        annotationElementId: id,
+        id,
+        deleted: false,
+        popupRef,
+        richText,
+        comment: contentsObj?.str || null,
+        creationDate,
+        modificationDate
+      };
+    }
+    const editor = await super.deserialize(data, parent, uiManager);
+    editor._initialData = initialData;
+    if (data.comment) {
+      editor.setCommentData(data);
+    }
+    return editor;
+  }
+  serialize(isForCopying = false) {
+    if (this.isEmpty() || isForCopying) {
+      return null;
+    }
+    if (this.deleted) {
+      return this.serializeDeleted();
+    }
+    const serialized = super.serialize(isForCopying);
+    Object.assign(serialized, {
+      color: AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color)),
+      opacity: this.opacity,
+      thickness: this._drawingOptions.thickness,
+      quadPoints: this._drawOutlines.serializeQuadPoints(this.pageTranslation, this.pageDimensions),
+      outlines: this._drawOutlines.serialize(serialized.rect, this._drawRotation)
+    });
+    this.addComment(serialized);
+    if (this.annotationElementId && !this.#hasElementChanged(serialized)) {
+      return null;
+    }
+    serialized.id = this.annotationElementId;
+    return serialized;
+  }
+  #hasElementChanged(serialized) {
+    const {
+      color
+    } = this._initialData;
+    return this.hasEditedComment || serialized.color.some((c, i) => c !== color[i]);
+  }
+  renderAnnotationElement(annotation) {
+    if (this.deleted) {
+      annotation.hide();
+      return null;
+    }
+    annotation.updateEdited({
+      rect: this.getPDFRect(),
+      popup: this.comment
+    });
+    return null;
+  }
+}
+
+;// ./src/display/editor/drawers/inkdraw.js
+
+
+
+
+
+
+
+class InkDrawOutliner {
+  #last = new Float64Array(6);
+  #tip = new Float64Array(2);
+  #line;
+  #lines;
+  #rotation;
+  #thickness;
+  #points;
+  #lastSVGPath = "";
+  #lastIndex = 0;
+  #outlines = new InkDrawOutline();
+  #parentWidth;
+  #parentHeight;
+  constructor(x, y, parentWidth, parentHeight, rotation, thickness) {
+    this.#parentWidth = parentWidth;
+    this.#parentHeight = parentHeight;
+    this.#rotation = rotation;
+    this.#thickness = thickness;
+    [x, y] = this.#normalizePoint(x, y);
+    const line = this.#line = [NaN, NaN, NaN, NaN, x, y];
+    this.#points = [x, y];
+    this.#lines = [{
+      line,
+      points: this.#points
+    }];
+    this.#last.set(line, 0);
+    this.#tip.set([x, y], 0);
+  }
+  updateProperty(name, value) {
+    if (name === "stroke-width") {
+      this.#thickness = value;
+    }
+  }
+  #normalizePoint(x, y) {
+    return Outline._normalizePoint(x, y, this.#parentWidth, this.#parentHeight, this.#rotation);
+  }
+  isEmpty() {
+    return !this.#lines?.length;
+  }
+  isCancellable() {
+    return this.#points.length <= 10;
+  }
+  add(x, y) {
+    if (this.#add(x, y)) {
+      this.toSVGPath();
+    }
+    return {
+      path: {
+        d: this.#toSVGPathWithTip()
+      }
+    };
+  }
+  addPoints(points) {
+    let needsPathUpdate = false;
+    for (let i = 0, ii = points.length; i < ii; i += 2) {
+      if (!this.#add(points[i], points[i + 1])) {
+        continue;
+      }
+      needsPathUpdate = true;
+      if (this.#points.length <= 6) {
+        this.toSVGPath();
+        needsPathUpdate = false;
+      }
+    }
+    if (needsPathUpdate) {
+      this.toSVGPath();
+    }
+    return {
+      path: {
+        d: this.#toSVGPathWithTip()
+      }
+    };
+  }
+  #add(x, y) {
+    [x, y] = this.#normalizePoint(x, y);
+    this.#tip.set([x, y], 0);
+    const [x1, y1, x2, y2] = this.#last.subarray(2, 6);
+    const diffX = x - x2;
+    const diffY = y - y2;
+    const d = Math.hypot(this.#parentWidth * diffX, this.#parentHeight * diffY);
+    if (d <= 2) {
+      return false;
+    }
+    this.#points.push(x, y);
+    if (isNaN(x1)) {
+      this.#last.set([x2, y2, x, y], 2);
+      this.#line.push(NaN, NaN, NaN, NaN, x, y);
+      return true;
+    }
+    if (isNaN(this.#last[0])) {
+      this.#line.splice(6, 6);
+    }
+    this.#last.set([x1, y1, x2, y2, x, y], 0);
+    this.#line.push(...Outline.createBezierPoints(x1, y1, x2, y2, x, y));
+    return true;
+  }
+  end(x, y) {
+    if (x !== undefined && this.#add(x, y)) {
+      return {
+        path: {
+          d: this.toSVGPath()
+        }
+      };
+    }
+    if (this.#points.length === 2) {
+      return {
+        path: {
+          d: this.toSVGPath()
+        }
+      };
+    }
+    return {
+      path: {
+        d: this.#lastSVGPath
+      }
+    };
+  }
+  startNew(x, y, parentWidth, parentHeight, rotation) {
+    this.#parentWidth = parentWidth;
+    this.#parentHeight = parentHeight;
+    this.#rotation = rotation;
+    [x, y] = this.#normalizePoint(x, y);
+    const line = this.#line = [NaN, NaN, NaN, NaN, x, y];
+    this.#points = [x, y];
+    this.#tip.set([x, y], 0);
+    const last = this.#lines.at(-1);
+    if (last) {
+      last.line = new Float32Array(last.line);
+      last.points = new Float32Array(last.points);
+    }
+    this.#lines.push({
+      line,
+      points: this.#points
+    });
+    this.#last.set(line, 0);
+    this.#lastIndex = 0;
+    this.toSVGPath();
+    return null;
+  }
+  getLastElement() {
+    return this.#lines.at(-1);
+  }
+  setLastElement(element) {
+    if (!this.#lines) {
+      return this.#outlines.setLastElement(element);
+    }
+    this.#lines.push(element);
+    this.#line = element.line;
+    this.#points = element.points;
+    this.#lastIndex = 0;
+    return {
+      path: {
+        d: this.toSVGPath()
+      }
+    };
+  }
+  removeLastElement() {

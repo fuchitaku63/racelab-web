@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c101b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RaceLab">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; worker-src 'self' blob:; img-src 'self' data:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Import Edition 統合開発版（未完成） | RaceLab Phase 3B-8 | 出走表照合・事前事後の分離</title>
+<style>
+:root{color-scheme:dark;--bg:#0c101b;--surface:#141b2b;--surface2:#1b2436;--line:#8392a9;--muted:#b4c0d4;--txt:#f1f5ff;--gold:#f5bd63;--cyan:#8cdeeb;--green:#9ee2bd;--red:#ffaaa5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}main{max-width:1460px;margin:auto;padding:24px 24px 50px}h1,h2,h3,p{margin:0}h1{font-size:27px;line-height:1.3}h2{font-size:19px}h3{font-size:16px}.muted,small{color:var(--muted)}small{font-size:13px}.eyebrow{font-size:12px;letter-spacing:1.5px;color:var(--cyan)}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}.version{font-size:14px;font-weight:500;color:var(--muted)}.offline{color:var(--cyan);font-size:13px}.notice{border-left:3px solid var(--gold);background:#31291d;padding:12px 15px;margin-bottom:16px}.notice p+ p{margin-top:4px}.sources{font-size:13px;color:var(--muted);overflow-wrap:anywhere}.topbar,.toolbar,.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.topbar{justify-content:space-between;margin:20px 0 16px}.mode{display:flex;gap:8px}.board{display:grid;grid-template-columns:365px minmax(0,1fr);gap:22px;align-items:start}.panel{border:1px solid #3c4b64;background:var(--surface);border-radius:10px;min-width:0}.panel-head{padding:16px 18px;border-bottom:1px solid #3c4b64;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}.panel-body{padding:18px}.field{display:flex;flex-direction:column;gap:5px;margin-bottom:15px;min-width:0}.field label{font-size:14px;font-weight:650}.required{color:var(--gold);font-size:12px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}input,select,textarea,button{font:inherit}textarea{resize:vertical}input,select,textarea{width:100%;min-width:0;min-height:46px;padding:9px 11px;color:var(--txt);background:#0e1523;border:1px solid var(--line);border-radius:6px}input::placeholder,textarea::placeholder{color:#a4b0c4}input[aria-invalid=true],select[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--red)}button{cursor:pointer;min-height:44px;padding:9px 14px;color:var(--txt);background:var(--surface2);border:1px solid var(--line);border-radius:6px;font-weight:650}button:hover{background:#2b3850}button.primary{background:var(--gold);color:#151b27;border-color:var(--gold)}button.primary:hover{background:#ffd08c}button[aria-pressed=true]{background:#25465b;border-color:var(--cyan);color:#d0f6ff}button:disabled{opacity:.5;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,.table-scroll:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}.field-error{font-size:13px;color:var(--red)}.field-error:empty{display:none}.warn{font-size:14px;color:var(--gold);margin:10px 0}.error-box{color:var(--red);white-space:pre-wrap;overflow-wrap:anywhere}.error-box:not(:empty){border-left:3px solid var(--red);padding:8px 12px;margin-bottom:16px;background:#38242c}.preview{margin:18px 0 0;border-top:1px solid #3c4b64;padding-top:15px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}.metric{background:#0d1422;padding:11px;border-radius:5px;min-width:0}.metric dt{font-size:12px;color:var(--muted)}.metric dd{margin:3px 0 0;font-size:21px;font-weight:750;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.positive{color:var(--green)}.negative{color:var(--red)}.basis{font-size:13px;color:var(--muted);margin:12px 0;overflow-wrap:anywhere}.stack{display:flex;flex-direction:column;gap:18px;min-width:0}.table-scroll{overflow:auto;max-height:660px}.results{width:100%;min-width:1140px;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}.results caption{padding:10px 18px;text-align:left;color:var(--muted);font-size:13px}.results th{position:sticky;top:0;background:#202c40;text-align:left;font-size:12px;white-space:nowrap}.results th,.results td{padding:12px 11px;border-bottom:1px solid #3c4b64;vertical-align:top}.results td.num,.results th.num{text-align:right;white-space:nowrap}.results .identity{min-width:170px;max-width:235px;overflow-wrap:anywhere;white-space:pre-wrap}.results .details{font-size:12px;color:var(--muted);margin-top:4px}.results .row-actions{display:flex;gap:7px;flex-wrap:wrap;min-width:150px}.results .empty{text-align:center;padding:30px;color:var(--muted)}.result-meta{font-size:13px;color:var(--muted)}.sort{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sort label{font-size:13px}.sort select{width:auto;font-size:14px;max-width:100%}.csv-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-top:14px}.csv-controls .field{flex:1;min-width:180px;margin:0}.csv-controls input{font-size:14px}input[type=file]::file-selector-button{min-height:36px;color:#162031;background:#d7e3f3;border:0;border-radius:4px;margin-right:8px}.status{min-height:26px;margin:12px 0;color:var(--cyan);font-size:14px;overflow-wrap:anywhere}details{padding:13px 18px}summary{cursor:pointer;min-height:36px;font-weight:650}details p,details ul{font-size:14px;color:var(--muted);margin:12px 0}code{font-size:.9em;overflow-wrap:anywhere}.csv-head{white-space:normal;overflow-wrap:anywhere}footer{font-size:13px;color:var(--muted);margin-top:22px;padding-top:16px;border-top:1px solid #3c4b64}dl{margin:0}[hidden]{display:none!important}
+@media(max-width:1000px){.board{grid-template-columns:320px minmax(0,1fr)}main{padding:20px 16px}.panel-body{padding:15px}}
+@media(max-width:760px){.board{grid-template-columns:1fr}.topbar{align-items:start}.mode{width:100%}.mode button{flex:1}main{padding:18px 12px 40px}h1{font-size:24px}.panel-head{padding:14px}.topbar>p{font-size:13px}.csv-controls{align-items:stretch}.csv-controls>button{width:100%}.results{min-width:1080px}}
+@media(max-width:360px){.pair{grid-template-columns:1fr;gap:0}.metrics{gap:8px}.metric dd{font-size:19px}.actions button{width:100%}.panel-body{padding:12px}}
+.history-nav{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 20px}.history-nav button{min-height:46px}.history-intro{color:var(--muted);margin:10px 0 18px}#historyView{min-width:0}#historyView>.panel{margin:18px 0}.history-actions{margin:15px 0}.history-filters{display:grid;grid-template-columns:2fr 1fr 1.2fr 1.2fr 1fr auto;gap:12px;align-items:end}.history-filters .field{margin:0}.history-filters input[type=date]{font-size:16px}.history-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.comparison-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.history-comparison{margin-top:20px;padding-top:18px;border-top:1px solid #3c4b64}.history-list-section{margin-top:22px}.history-race{border:1px solid #8392a9;border-radius:7px;background:var(--surface);margin:14px 0;padding:0;overflow:hidden}.history-race>summary{padding:14px 16px;min-height:50px;overflow-wrap:anywhere}.history-race>summary .result-meta{display:block;font-weight:400}.history-table{min-width:1450px;width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}.history-table th,.history-table td{padding:12px;border-bottom:1px solid #3c4b64;vertical-align:top;text-align:left}.history-table th{background:#202c40;white-space:nowrap;font-size:13px}.history-table .num{text-align:right;white-space:nowrap}.history-table .ticket{min-width:140px;white-space:pre-wrap;overflow-wrap:anywhere}.history-table .provenance{min-width:270px;max-width:400px}.history-table details{padding:0}.history-table details summary{min-height:44px}.history-table details p{white-space:pre-wrap;overflow-wrap:anywhere}.history-source-dl{margin:12px 0}.history-source-dl dt{font-weight:650;color:var(--muted);font-size:12px}.history-source-dl dd{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}.history-warning-list{padding-left:20px;font-size:13px;color:var(--gold)}.history-warning-list li{margin:5px 0}.history-empty{padding:22px;background:var(--surface);border:1px solid #3c4b64;border-radius:7px;color:var(--muted);margin:14px 0}.history-state{font-size:13px;white-space:nowrap}.history-minor{font-size:12px;color:var(--muted);white-space:normal}.history-source-dl dd{max-width:360px}
+@media(max-width:1100px){.history-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.history-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.history-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.history-nav{flex-direction:column}.comparison-metrics{grid-template-columns:1fr}.history-metrics .metric dd{font-size:21px}.history-race>summary{font-size:15px}.history-filters input[type=date]{width:100%}}
+@media(max-width:370px){.history-filters{grid-template-columns:1fr}.history-metrics{grid-template-columns:1fr 1fr}.comparison-metrics{grid-template-columns:1fr}}
+
+#qualityView{min-width:0}#qualityView>.panel{margin:18px 0}#qualityView p{overflow-wrap:anywhere}#qualityView textarea{width:100%;min-height:180px;resize:vertical;font:14px/1.55 monospace;color:var(--txt);background:var(--surface);border:1px solid #8392a9;border-radius:6px;padding:12px}#qualityView textarea:focus-visible{outline:3px solid var(--gold);outline-offset:2px}.q-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.q-grid .field{min-width:0;margin:0}.q-wide{grid-column:1/-1}.q-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:18px 0}.q-toolbar .field{flex:1;min-width:180px;margin:0}.q-note{color:var(--muted);font-size:13px}.q-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}.q-metrics .metric dd{font-size:25px}.q-table{width:100%;min-width:1000px;border-collapse:collapse;font-size:14px}.q-table th,.q-table td{padding:12px;border-bottom:1px solid #3c4b64;vertical-align:top;text-align:left;overflow-wrap:anywhere;max-width:340px}.q-table th{background:#202c40}.q-table td{white-space:pre-wrap}.q-table summary{min-height:44px;cursor:pointer}.q-table details dl{max-width:330px}.q-table dd{margin:0 0 10px;overflow-wrap:anywhere;white-space:pre-wrap}.q-table dt{color:var(--muted);font-size:12px}.q-hash{font-family:monospace;overflow-wrap:anywhere;font-size:12px}.q-errors{padding-left:22px;margin:0}.q-errors li{margin:8px 0;overflow-wrap:anywhere}.q-state{font-weight:650}.q-pages{display:flex;align-items:center;gap:16px;margin-top:16px;flex-wrap:wrap}.q-sources{padding-left:20px}.q-sources li{margin:12px 0;overflow-wrap:anywhere}.q-sources p{margin:4px 0}.q-warning{border-left:3px solid var(--gold);padding:8px 14px}.q-page-note{margin:16px 0}
+@media(max-width:700px){.q-grid{grid-template-columns:1fr}.q-wide{grid-column:auto}.q-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.q-toolbar{align-items:stretch}.q-toolbar button{width:100%}#qualityView input,#qualityView select,#qualityView textarea{font-size:16px;max-width:100%}.q-metrics .metric dd{font-size:22px}}
+
+#modelView{min-width:0}#modelView>.panel{margin:18px 0}#modelView p{overflow-wrap:anywhere}.model-label{font-size:13px;color:var(--gold);font-weight:700;letter-spacing:.05em}.model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.model-grid .field{min-width:0;margin:0}.model-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}.model-toolbar .field{flex:1;min-width:180px;margin:0}.model-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}.model-metrics .metric dd{font-size:24px}.model-card{border:1px solid #53637a;background:#101829;border-radius:7px;padding:16px;margin:14px 0;min-width:0}.model-card>h4{margin:0 0 8px}.model-table{width:100%;min-width:900px;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}.model-table th,.model-table td{text-align:left;vertical-align:top;padding:11px;border-bottom:1px solid #3c4b64;overflow-wrap:anywhere;white-space:pre-wrap;max-width:320px}.model-table th{background:#202c40}.model-table caption{text-align:left;padding:12px;color:var(--muted)}#modelView textarea{font:14px/1.5 monospace;min-height:230px;width:100%}.model-hash{font-family:monospace;overflow-wrap:anywhere;font-size:12px}.model-feature dd{margin:0 0 12px;overflow-wrap:anywhere;white-space:pre-wrap}.model-feature dt{font-weight:600;color:var(--muted);font-size:13px}.model-warning-list{padding-left:20px;color:var(--gold);font-size:14px}.model-warning-list li{margin:6px 0;overflow-wrap:anywhere}.model-distribution{min-width:450px}#modelGroupResults .model-table{min-width:850px}.model-subtitle{margin:12px 0!important;color:var(--muted);font-size:14px}
+@media(max-width:700px){.model-grid{grid-template-columns:1fr}.model-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.model-toolbar{align-items:stretch}.model-toolbar button{width:100%}#modelView input,#modelView select,#modelView textarea{font-size:16px}.model-metrics .metric dd{font-size:22px}.model-card{padding:12px}}
+
+</style>
+<style>
+.ability-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(0,1.3fr);gap:20px;align-items:start}.ability-layout>.panel{min-width:0}.ability-layout textarea{font-family:ui-monospace,monospace;font-size:14px}.ability-text{overflow-wrap:anywhere;white-space:pre-wrap;margin-bottom:10px}.ability-preview{border:1px solid var(--cyan);border-radius:7px;padding:13px;margin-top:16px;background:#112832}.ability-preview p{margin:8px 0}.ability-preview ul{padding-left:22px;font-size:14px}.ability-ranking table{border-collapse:collapse;table-layout:fixed;width:100%;font-size:14px;margin:16px 0}.ability-ranking th,.ability-ranking td{padding:8px 5px;border-bottom:1px solid #53627c;text-align:left;overflow-wrap:anywhere}.ability-ranking th:nth-child(1){width:13%}.ability-ranking th:nth-child(2){width:40%}.ability-ranking th:nth-child(3){width:22%}.ability-ranking button{padding:7px;min-height:44px;text-align:left;width:100%;font-weight:500;overflow-wrap:anywhere}.ability-ranking tr[aria-selected=true]{background:#203b4c}.ability-score{font-size:21px;font-weight:750;color:var(--gold);white-space:nowrap}.ability-cards{margin-top:16px}.ability-card{border:1px solid #53627c;border-radius:8px;padding:14px;min-width:0}.ability-card h3{overflow-wrap:anywhere}.ability-card p{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}.ability-card dl{display:grid;grid-template-columns:100px minmax(0,1fr);gap:5px 12px;font-size:14px}.ability-card dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.ability-card dt{color:var(--muted)}.ability-card details{padding:8px 0}.ability-evidence-item{padding:13px 0;border-top:1px solid #53627c}.ability-evidence-item h4{margin:0 0 10px}.ability-evidence-item .missing{color:var(--gold)}.ability-lines{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0}.ability-line{border:1px solid #63748d;border-radius:6px;padding:9px;font-size:14px;overflow-wrap:anywhere;max-width:100%}.ability-line strong{color:var(--cyan)}.ability-line-meta{width:100%;color:var(--muted);font-size:13px;overflow-wrap:anywhere}.ability-save{margin-top:17px}#abilityEditor{margin-top:20px;max-width:900px}#abilityWarnings{overflow-wrap:anywhere}#abilityView .field{margin-top:12px}#abilityPrompt{font-size:13px}#abilityPreviewRows{max-height:330px;overflow:auto}#abilityCards:focus-visible{outline:3px solid var(--cyan)}@media(max-width:1000px){.ability-layout{grid-template-columns:1fr}.ability-ranking th:nth-child(2){width:39%}.ability-ranking th:nth-child(3){width:23%}}@media(max-width:430px){.ability-card dl{grid-template-columns:1fr}.ability-card dt{font-weight:650}.ability-card dd{margin-bottom:8px}.ability-ranking th,.ability-ranking td{padding:7px 3px}.ability-ranking table{font-size:13px}.ability-ranking button{font-size:14px}.ability-score{font-size:18px}.ability-ranking th:nth-child(1){width:12%}.ability-ranking th:nth-child(2){width:39%}.ability-ranking th:nth-child(3){width:23%}.ability-preview{padding:10px}}
+
+.ability-card summary{min-height:44px}.ability-evidence-item>summary{font-size:14px}.ability-evidence-item dl{margin:12px 0}
+
+</style>
+<style>
+.manual-grid{display:grid;grid-template-columns:minmax(270px,.7fr) minmax(0,1.3fr);gap:20px;align-items:start}.manual-grid>.panel{min-width:0}.manual-grid textarea{font-family:ui-monospace,monospace;font-size:14px}.manual-check{display:flex;gap:10px;align-items:start;min-height:44px;font-size:14px;margin:14px 0}.manual-check input{width:22px;min-height:24px;flex:none}.manual-preview{border:1px solid var(--cyan);padding:12px;margin:12px 0;border-radius:6px;max-height:300px;overflow:auto}.manual-preview p{margin:8px 0}.manual-grid fieldset{margin:0;padding:12px;min-width:0;border:1px solid #63748d;border-radius:6px}.manual-grid fieldset:disabled{opacity:.55}#manualDetails{margin:18px 0}#manualDetails p,#manualDetails dd,#manualGateStatus,#manualPreview{overflow-wrap:anywhere;white-space:pre-wrap}#manualDetails summary{min-height:44px}#manualDetails dl{display:grid;grid-template-columns:100px minmax(0,1fr);gap:6px 12px}#manualDetails dd{margin:0}#manualDetails dt{color:var(--muted)}#manualEditor{margin-top:20px}#manualView .field{margin-top:12px}#manualText{font-size:13px}#manualRanking table{font-size:14px}@media(max-width:1000px){.manual-grid{grid-template-columns:1fr}}@media(max-width:430px){#manualDetails dl{grid-template-columns:1fr}#manualDetails dd{margin-bottom:10px}#manualRanking table{font-size:13px}.manual-grid fieldset{padding:8px}}
+
+</style>
+<style>
+.prep{max-width:1180px;margin:auto;min-width:0}.prep .card{margin:16px 0;padding:20px;border:1px solid var(--border,#ccd3de);border-radius:12px;background:var(--surface,#141b2b)}.prep label{display:flex;flex-direction:column;gap:5px;min-width:0;margin:8px 0}.prep label:has(input[type=checkbox]){display:block}.prep input,.prep select,.prep button{min-height:44px;max-width:100%;font:inherit}.prep input:not([type=checkbox]),.prep select,.prep textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid #9aabc0;border-radius:6px}.prep input[type=checkbox]{vertical-align:middle;width:22px;min-height:22px}.prep textarea{resize:vertical;font:inherit;overflow-wrap:anywhere}.prep .prep-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.prep-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.prep button{padding:10px 14px;white-space:normal}.prep details{border:1px solid #c8d4e3;padding:10px;margin:10px 0;border-radius:8px;min-width:0}.prep summary{min-height:34px;padding:6px;cursor:pointer;font-weight:600}.prep p,.prep li,.prep summary{overflow-wrap:anywhere}.prep #prepError{color:var(--red,#ffaaa5);white-space:pre-wrap}.prep .prep-fact-meta{background:var(--surface2,#1b2436);padding:9px}.prep .prep-missing{max-height:320px;overflow:auto}.prep table{width:100%;table-layout:fixed}.prep th,.prep td{overflow-wrap:anywhere;padding:8px}.prep small{color:var(--muted,#b4c0d4)}@media(max-width:600px){.prep .card{padding:12px}.prep .prep-grid{grid-template-columns:minmax(0,1fr)}.prep-actions button{flex:1 1 140px}.prep{width:100%}.prep th,.prep td{padding:5px;font-size:13px}}
+
+</style><style>
+.study{max-width:1180px;margin:auto;min-width:0}.study>.panel{margin:16px 0;min-width:0}.study label{display:flex;flex-direction:column;gap:5px;margin:10px 0;min-width:0}.study .study-check{display:flex;flex-direction:row;align-items:flex-start;gap:10px}.study input[type=checkbox]{width:22px;min-height:24px;flex:none}.study input,.study select,.study button{font:inherit;min-height:44px;max-width:100%}.study input:not([type=checkbox]),.study select,.study textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid var(--line);border-radius:6px}.study textarea{resize:vertical;font:13px ui-monospace,monospace;overflow-wrap:anywhere}.study-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.study-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.study button{padding:10px 14px;white-space:normal}.study details{padding:10px;border:1px solid #65768d;border-radius:8px;margin:10px 0}.study summary{min-height:44px;display:list-item;cursor:pointer}.study pre{white-space:pre-wrap;overflow-wrap:anywhere}.study p,.study li,.study summary,.study dd{overflow-wrap:anywhere}.study table{width:100%;table-layout:fixed}.study th,.study td{padding:8px;overflow-wrap:anywhere}.study #studyError{color:var(--red);white-space:pre-wrap}.study .study-list{max-height:340px;overflow:auto}.study .review{border-left:3px solid var(--gold);padding-left:12px}.study .good{color:var(--green)}@media(max-width:600px){.study-grid{grid-template-columns:minmax(0,1fr)}.study-actions button{flex:1 1 150px}.study th,.study td{font-size:13px;padding:5px}.study>.panel{padding:12px}}
+
+</style><style>
+.identity{max-width:1180px;margin:auto;min-width:0}.identity>.panel{padding:18px;margin:16px 0;min-width:0}.identity label{display:flex;flex-direction:column;gap:5px;margin:10px 0;min-width:0}.identity-check{flex-direction:row!important;align-items:flex-start;gap:10px}.identity input[type=checkbox]{width:22px;min-height:24px;flex:none}.identity input,.identity select,.identity button{font:inherit;min-height:44px;max-width:100%}.identity input:not([type=checkbox]),.identity select,.identity textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid var(--line);border-radius:6px}.identity textarea{font:13px ui-monospace,monospace;resize:vertical}.identity-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}.identity-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.identity button{padding:10px 14px;white-space:normal}.identity p,.identity pre,.identity td,.identity summary{overflow-wrap:anywhere}.identity pre{white-space:pre-wrap;font-size:13px}.identity .identity-row{border:1px solid #708199;border-radius:8px;padding:10px;margin:8px 0;display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:10px;align-items:center}.identity .identity-row.bad{border:2px solid var(--red);background:#331d29}.identity .identity-row strong{font-size:20px}.identity .identity-row .name-pair{min-width:0}.identity .identity-row p{margin:4px 0}.identity .identity-row .frame{color:var(--muted);font-size:12px}.identity #idError{color:var(--red);white-space:pre-wrap}.identity table{width:100%;table-layout:fixed}.identity th,.identity td{padding:7px;overflow-wrap:anywhere}.identity details{padding:10px;border:1px solid var(--line);border-radius:8px}.identity summary{min-height:44px;cursor:pointer}.identity .identity-warning{color:var(--gold)}body.identity-revoked #manualRanking,body.identity-revoked #manualDetails,body.identity-revoked #manualText,body.identity-revoked #manualEditor,body.identity-revoked #abilityRanking,body.identity-revoked #abilityCards{display:none!important}#identityGlobalNotice{padding:10px 14px;border:1px solid var(--gold);border-radius:7px;margin:10px 0;color:var(--gold);overflow-wrap:anywhere}@media(max-width:600px){.identity-grid{grid-template-columns:minmax(0,1fr)}.identity>.panel{padding:12px}.identity .identity-row{grid-template-columns:48px minmax(0,1fr)}.identity .identity-row button{grid-column:1/-1}.identity-actions button{flex:1 1 145px}.identity th,.identity td{font-size:13px;padding:4px}}
+
+</style><style>body.import-active .history-nav,body.import-active #identityGlobalNotice{display:none}#quickView{max-width:1200px;margin:auto}#quickView h2{font-size:24px;margin:20px 0 8px}#quickView h3{font-size:20px;margin:0 0 14px}#quickView p{line-height:1.7}#quickView textarea,#quickView input:not([type=checkbox]),#quickView select{display:block;width:100%;min-width:0;font-size:16px;padding:11px;background:#0d1422;color:#f1f5ff;border:1px solid #899ab2;border-radius:5px}#quickView label{display:block;margin:12px 0}#quickView input[type=checkbox]{min-width:24px;min-height:24px;vertical-align:middle;margin-right:9px}#quickView button,#quickAdvanced{min-height:44px;padding:10px 15px;font-size:16px}#quickView button:focus-visible,#quickView input:focus-visible,#quickView select:focus-visible,#quickView summary:focus-visible,#quickView textarea:focus-visible,#quickAdvanced:focus-visible{outline:3px solid #67cfde;outline-offset:3px}.quick-step{padding:22px 0;border-top:1px solid #8293ab}.quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}.quick-actions{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}#quickView details{margin:16px 0;padding:12px;border:1px solid #53657d;border-radius:5px}#quickView summary{cursor:pointer;font-size:16px;min-height:32px;font-weight:bold}#quickView pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;max-height:400px;overflow:auto}.quick-table{overflow:auto}#quickView table{width:100%;border-collapse:collapse}#quickView th,#quickView td{padding:10px 8px;border-bottom:1px solid #596a81;text-align:left;vertical-align:top}#quickView td input{max-width:110px}.quick-person{min-width:170px}.quick-person strong{display:block;overflow-wrap:anywhere}#quickView .quick-bad{background:#402129;color:#ffcecb}#quickView .quick-warning,#quickError{color:#ffc779;overflow-wrap:anywhere}#quickView .quick-ok{color:#9be4ba}#quickView .quick-primary{background:#f7bc61;color:#101724;border:1px solid #f7bc61;font-weight:bold}#quickView .quick-freq{display:block;height:8px;background:#67cfde;margin-top:7px}#quickStatus{background:#18253a;padding:12px;border-left:3px solid #67cfde;overflow-wrap:anywhere}#quickView .quick-limit{font-size:14px;color:#becbdf}.quick-switch{margin:20px 0}body:not(.import-active) #quickAdvanced{display:none}@media(max-width:600px){.quick-grid{grid-template-columns:1fr}#quickView h2{font-size:21px}.quick-step{padding:18px 0}#quickView button{width:100%}#quickView th,#quickView td{padding:9px 5px}.quick-person{min-width:150px}#quickView details{padding:8px}}@media(prefers-reduced-motion:reduce){#quickView *{scroll-behavior:auto!important;animation:none!important}}
+#quickView p,#quickView label,#quickSummary{overflow-wrap:anywhere}#quickView input[type=checkbox]{width:24px;max-width:24px;height:24px}body.import-active .version{display:block;overflow-wrap:anywhere}#quickAdvanced{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+.import-active:not(.racelab-development) .developer-only{display:none!important}
+.import-active:not(.racelab-development) #quickRoster .dev-score{display:none!important}
+@media print {button,input,select,textarea,nav,.quick-actions {display:none!important}}
+</style><style id="race-jra-style">body.horse-mode main>header,body.horse-mode .history-nav,body.horse-mode #quickAdvanced,body.horse-mode main>footer,body.keirin-mode main>header,body.keirin-mode .history-nav,body.keirin-mode #quickAdvanced,body.keirin-mode main>footer{display:none!important}
+:is(#horseLab,#keirinLab){max-width:1180px;margin:auto;padding:6px 0 40px;color:#f1f5ff}
+:is(#horseLab,#keirinLab) .hl-head{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:center;border-bottom:1px solid #3c4b64;padding:14px 0 26px;margin:0 0 24px}
+:is(#horseLab,#keirinLab) .hl-head h1{font-size:clamp(24px,4vw,36px)}
+:is(#horseLab,#keirinLab) .hl-overline{font-size:12px;letter-spacing:2px;color:#8cdeeb}
+:is(#horseLab,#keirinLab) .hl-muted{color:#b4c0d4;margin:5px 0 8px;font-size:14px}
+:is(#horseLab,#keirinLab) .hl-notice{border-left:3px solid #f5bd63;background:#2b251e;padding:12px 16px;font-size:14px;margin-bottom:20px}
+:is(#horseLab,#keirinLab) .hl-step{display:flex;gap:20px;border:1px solid #3c4b64;border-radius:14px;padding:22px;margin:18px 0;background:#141b2b}
+:is(#horseLab,#keirinLab) .hl-number{background:#f5bd63;color:#1a2332;display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:50%;font-weight:800}
+:is(#horseLab,#keirinLab) .hl-content{min-width:0;flex:1}
+:is(#horseLab,#keirinLab) h2{font-size:20px;margin-bottom:7px}
+:is(#horseLab,#keirinLab) .hl-picker{display:inline-block;border:1px dashed #8cdeeb;border-radius:10px;margin:16px 0 12px;padding:14px 18px;font-weight:bold;max-width:100%;cursor:pointer}
+:is(#horseLab,#keirinLab) .hl-picker input{margin:9px 0 0;max-width:100%}
+:is(#horseLab,#keirinLab) #horseStatus{color:#8cdeeb;font-size:14px;min-height:25px}
+:is(#horseLab,#keirinLab) .hl-error{color:#ffaaa5;font-size:14px;white-space:pre-wrap}
+:is(#horseLab,#keirinLab) .hl-scroll{overflow:auto;max-height:680px;border:1px solid #3c4b64;border-radius:8px;margin:14px 0}
+:is(#horseLab,#keirinLab) .hl-table{border-collapse:collapse;width:100%;min-width:670px;font-size:14px}
+:is(#horseLab,#keirinLab) .hl-table th,:is(#horseLab,#keirinLab) .hl-table td{padding:11px 10px;text-align:left;border-bottom:1px solid #34445b}
+:is(#horseLab,#keirinLab) .hl-table th{background:#202d42;position:sticky;top:0}
+:is(#horseLab,#keirinLab) .hl-score{font-weight:750;color:#f5bd63;font-variant-numeric:tabular-nums}
+:is(#horseLab,#keirinLab) .hl-race-summary{display:flex;flex-wrap:wrap;gap:12px;padding:12px;border-radius:9px;background:#1c2d44;font-size:14px}
+:is(#horseLab,#keirinLab) .hl-race-summary span{padding:4px 7px}
+:is(#horseLab,#keirinLab) .hl-footnote{font-size:13px;color:#b4c0d4;margin:12px 0}
+:is(#horseLab,#keirinLab) .hl-controls{display:flex;flex-wrap:wrap;align-items:end;gap:14px;margin:12px 0}
+:is(#horseLab,#keirinLab) .hl-controls label{display:flex;flex-direction:column;font-size:13px;gap:4px}
+:is(#horseLab,#keirinLab) .hl-controls select{width:160px;max-width:100%}
+:is(#horseLab,#keirinLab) button.hl-primary{color:#121b2b;background:#f5bd63;border:1px solid #f5bd63;font-size:16px}
+:is(#horseLab,#keirinLab) .hl-scenarios{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}
+:is(#horseLab,#keirinLab) .hl-scenario{border:1px solid #526580;background:#101829;border-radius:10px;padding:17px;min-width:0}
+:is(#horseLab,#keirinLab) .hl-scenario h3{font-size:17px;margin-bottom:8px;color:#8cdeeb}
+:is(#horseLab,#keirinLab) .hl-scenario h4{font-size:14px;margin:18px 0 6px}
+:is(#horseLab,#keirinLab) .hl-scenario ol{padding-left:24px;margin:8px 0}
+:is(#horseLab,#keirinLab) .hl-scenario li{font-variant-numeric:tabular-nums;margin:5px 0}
+:is(#horseLab,#keirinLab) .hl-ticket{font-size:18px;font-weight:740;color:#f5bd63}
+:is(#horseLab,#keirinLab) .hl-details{border:1px solid #3c4b64;border-radius:10px;padding:12px 16px}
+:is(#horseLab,#keirinLab) .hl-details summary{font-size:15px}
+:is(#horseLab,#keirinLab) .hl-details p{color:#b4c0d4;font-size:14px;margin:9px 0}
+@media(max-width:850px){:is(#horseLab,#keirinLab) .hl-scenarios{grid-template-columns:1fr}:is(#horseLab,#keirinLab) .hl-step{padding:16px;gap:12px}:is(#horseLab,#keirinLab) .hl-controls>button{width:100%}}
+
+#horseLab .hl-score-detail, #keirinLab .hl-score-detail{border:1px solid #556983;padding:8px 12px;border-radius:7px;background:#0f1b2c;margin:8px 0}
+:is(#horseLab,#keirinLab) .hl-evidence summary{cursor:pointer;font-size:13px;color:#8cdeeb}
+:is(#horseLab,#keirinLab) .hl-evidence ul{margin:8px 0;padding-left:20px;font-size:13px;color:#cbd6e5}
+:is(#horseLab,#keirinLab) .hl-evidence li{padding:3px 0}
+:is(#horseLab,#keirinLab) .hl-pct{font-size:16px;color:#9ee2bd;font-weight:750;font-variant-numeric:tabular-nums}
+:is(#horseLab,#keirinLab) .hl-probbar{background:#283a50;height:7px;max-width:220px;border-radius:8px;margin:4px 0 8px;overflow:hidden}
+:is(#horseLab,#keirinLab) .hl-probbar span{background:#9ee2bd;height:100%;display:block}
+:is(#horseLab,#keirinLab) .hl-ticket-list{padding-left:22px}
+:is(#horseLab,#keirinLab) .hl-ticket-list li{margin:12px 0}
+:is(#horseLab,#keirinLab) .hl-disclaimer{font-size:13px;color:#ffcf96;margin:10px 0}
+:is(#horseLab,#keirinLab) .hl-simprogress{min-height:24px;color:#8cdeeb;font-size:14px;margin:8px 0}
+:is(#horseLab,#keirinLab) .hl-factor-list{font-size:13px;color:#c6d5e9;line-height:1.7}
+:is(#horseLab,#keirinLab) .hl-factor-list li{margin:2px 0}
+:is(#horseLab,#keirinLab) .hl-nav{display:flex;gap:10px;flex-wrap:wrap}
+:is(#horseLab,#keirinLab) .hl-nav button{background:#23445b;color:#e8f8ff}
+:is(#horseLab,#keirinLab) textarea{min-height:110px;max-width:100%;width:100%}
+:is(#horseLab,#keirinLab) #keirinSelect{width:min(400px,100%)}
+:is(#horseLab,#keirinLab) .hl-topline{background:#193149;padding:10px 14px;border-radius:8px;margin-bottom:14px}
+:is(#horseLab,#keirinLab) .hl-table td{vertical-align:top}
+:is(#horseLab,#keirinLab) .hl-scenario ol{font-size:14px}
+:is(#horseLab,#keirinLab) .hl-scenario{overflow-wrap:anywhere}
+
+/* Main-line and exploratory-upset results remain separate, with evidence on every upset. */
+:is(#horseLab,#keirinLab) .hl-hole-focus{border:2px solid #b89455;border-radius:12px;padding:18px;background:#1d2634;margin-top:20px;overflow-wrap:anywhere}
+:is(#horseLab,#keirinLab) .hl-hole-heading{display:flex;align-items:flex-start;gap:14px;justify-content:space-between;flex-wrap:wrap}
+:is(#horseLab,#keirinLab) .hl-hole-heading h3{font-size:22px;color:#ffd79b;margin:2px 0 6px}
+:is(#horseLab,#keirinLab) .hl-hole-heading p{font-size:14px;max-width:580px;color:#d6dce5}
+:is(#horseLab,#keirinLab) .hl-hole-note{font-size:13px;padding:10px 12px;background:#2b2a29;border-radius:7px;margin:10px 0 14px}
+:is(#horseLab,#keirinLab) .hl-hole-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+:is(#horseLab,#keirinLab) .hl-hole-col{background:#111b2c;border:1px solid #526580;border-radius:9px;padding:13px;min-width:0}
+:is(#horseLab,#keirinLab) .hl-hole-col h4{color:#ffd79b;font-size:17px;margin:0 0 2px}
+:is(#horseLab,#keirinLab) .hl-hole-items{padding-left:19px;margin:9px 0}
+:is(#horseLab,#keirinLab) .hl-hole-ticket{padding:12px 0;border-bottom:1px solid #334963;line-height:1.5}
+:is(#horseLab,#keirinLab) .hl-hole-ticket:last-child{border-bottom:0}
+:is(#horseLab,#keirinLab) .hl-hole-ticket-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px}
+:is(#horseLab,#keirinLab) .hl-hole-reason{font-size:14px;margin:8px 0}
+:is(#horseLab,#keirinLab) .hl-hole-evidence{color:#d0dcec;font-size:13px;margin:6px 0}
+:is(#horseLab,#keirinLab) .hl-hole-method{border-top:1px solid #526580;margin-top:14px;padding-top:12px;font-size:13px}
+:is(#horseLab,#keirinLab) .hl-hole-method p{margin:8px 0;color:#cdd7e6}
+@media(max-width:1000px){:is(#horseLab,#keirinLab) .hl-hole-grid{grid-template-columns:1fr}}
+</style></head>
+<body>
+<main>
+<header><div><p class="eyebrow">OFFLINE / MANUAL EV ANALYSIS</p><h1>RaceLab <span class="version">Import Edition 統合開発版（未完成） / Phase 3B-8継承</span></h1><p class="muted">競馬・競輪の能力評価と手入力EV分析</p></div><p class="offline">完全オフライン · 外部通信なし</p></header>
+<nav class="history-nav" aria-label="画面切替"><button id="showQuick">簡単取込・シミュレーション</button><button id="showIdentity" aria-controls="identityView" aria-pressed="false">出走表照合（必須）</button><button id="showStudy" aria-pressed="false" aria-controls="studyView">② 数値成績・軽量依頼・評価比較</button><button id="showPreparation" aria-pressed="false" aria-controls="prepView">① レース情報・ユニ依頼</button><button id="showManual" aria-pressed="false" aria-controls="manualView">実レース・手動能力分析</button><button id="showAbility" type="button" aria-pressed="false" aria-controls="abilityView">架空テスト（V1）</button><button id="showEV" type="button" aria-pressed="true" aria-controls="phase1View">事前EV計算（Phase 1）</button><button id="showHistory" type="button" aria-pressed="false" aria-controls="historyView">過去レースの記録・検証</button><button id="showQuality" type="button" aria-pressed="false" aria-controls="qualityView">データ取込・品質検証</button><button id="showModel" type="button" aria-pressed="false" aria-controls="modelView">確率・バックテスト DEMO</button></nav>
+<div id="phase1View">
+<aside class="notice" aria-label="確率の前提"><p><strong>推定的中確率は、利用者が設定する仮定値です。</strong><br>現実の予測精度・校正は確認されていません。EVが正でも購入を自動推奨しません。</p><p class="sources">確率出所: MANUAL_ASSUMPTION ／ オッズ出所: MANUAL_INPUT</p></aside>
+<div class="topbar"><div class="mode" role="group" aria-label="競技切替"><button type="button" id="horseMode" aria-pressed="true">競馬</button><button type="button" id="keirinMode" aria-pressed="false">競輪</button></div><p class="muted">画面を閉じると入力は消えます。保存にはCSV出力を使ってください。</p></div>
+<div class="board">
+<section class="panel" aria-labelledby="inputHeading"><div class="panel-head"><h2 id="inputHeading">買い目を入力</h2><span id="editingLabel" class="result-meta">新規入力</span></div><div class="panel-body">
+<form id="entryForm" novalidate>
+<div class="field"><label for="count">出走数 <span class="required">必須</span></label><select id="count" aria-describedby="count-error"></select><span class="field-error" id="count-error"></span></div>
+<div class="field"><label for="raceId">レースID <span class="required">必須</span></label><textarea id="raceId" rows="1" autocomplete="off" maxlength="200" placeholder="例: 20261025_東京_11R" aria-describedby="raceId-error"></textarea><span class="field-error" id="raceId-error"></span></div>
+<div class="field"><label for="betType">券種 <span class="required">必須</span></label><select id="betType" aria-describedby="betType-error"></select><span class="field-error" id="betType-error"></span></div>
+<div class="field"><label for="combination">組み合わせ <span class="required">必須</span></label><input id="combination" autocomplete="off" maxlength="50" placeholder="例: 1" aria-describedby="comboHelp combination-error"><small id="comboHelp"></small><span class="field-error" id="combination-error"></span></div>
+<div class="field"><label for="label">日本語名・メモ <small>任意</small></label><textarea id="label" rows="2" autocomplete="off" maxlength="2000" placeholder="例: 馬名・選手名、仮定の根拠" aria-describedby="label-error"></textarea><span class="field-error" id="label-error"></span></div>
+<div class="pair"><div class="field"><label for="probabilityPercent">推定的中確率（%） <span class="required">必須</span></label><input id="probabilityPercent" inputmode="decimal" autocomplete="off" placeholder="例: 24" aria-describedby="probabilityHelp probabilityPercent-error"><span class="field-error" id="probabilityPercent-error"></span></div><div class="field"><label for="odds">十進オッズ（倍） <span class="required">必須</span></label><input id="odds" inputmode="decimal" autocomplete="off" placeholder="例: 5.2" aria-describedby="oddsHelp odds-error"><span class="field-error" id="odds-error"></span></div></div>
+<p id="probabilityHelp" class="sources">確率は0〜100%。この買い目自体が的中する確率を入力します。</p>
+<p id="oddsHelp" class="sources">オッズは1より大きい、元本込みの払戻倍率です。</p>
+<div class="field" style="margin-top:15px"><label for="stake">購入金額（円） <small>任意</small></label><input id="stake" inputmode="decimal" autocomplete="off" placeholder="空欄なら金額結果を表示しません" aria-describedby="stake-error"><span class="field-error" id="stake-error"></span></div>
+<p id="betWarning" class="warn" hidden>複勝・ワイドは払戻倍率が変動します。入力した単一倍率に対する計算です。</p>
+<div id="formError" class="error-box" role="alert"></div>
+<div class="actions"><button class="primary" id="saveEntry" type="submit">計算して一覧に追加</button><button id="clearDraft" type="button">入力をクリア</button><button id="cancelEdit" type="button" hidden>編集を中止</button></div>
+</form>
+<section class="preview" aria-labelledby="previewHeading"><h3 id="previewHeading">入力中の計算プレビュー</h3><p id="previewState" class="result-meta">必須項目を入力すると表示します。</p><dl class="metrics"><div class="metric"><dt>期待収益率（EV）</dt><dd id="previewEV">—</dd></div><div class="metric"><dt>損益分岐確率</dt><dd id="previewBreakEven">—</dd></div><div class="metric"><dt>期待払戻</dt><dd id="previewPayout">—</dd></div><div class="metric"><dt>期待損益</dt><dd id="previewProfit">—</dd></div></dl><p id="basis" class="basis">EV = p × オッズ − 1</p></section>
+</div></section>
+<div class="stack">
+<section class="panel" aria-labelledby="resultsHeading"><div class="panel-head"><div><h2 id="resultsHeading">競馬のEV一覧</h2><p id="resultCount" class="result-meta" role="status">0件</p></div><div class="sort"><label for="sortOrder">並べ替え</label><select id="sortOrder"><option value="evDesc">EV 高い順</option><option value="evAsc">EV 低い順</option><option value="original">登録順</option></select></div></div><div class="panel-body" style="padding-bottom:0"><p class="result-meta">表は横にスクロールできます。金額未入力の結果は「—」です。</p><p id="duplicateWarning" class="warn" hidden></p></div><div class="table-scroll" tabindex="0" role="region" aria-label="EV結果表（横スクロール可能）"><table class="results"><caption>率は表示時のみ丸め、CSVには内部値を保存します。</caption><thead><tr><th scope="col">レース・買い目</th><th scope="col" class="num">EV</th><th scope="col" class="num">確率 / オッズ</th><th scope="col" class="num">購入金額</th><th scope="col" class="num">損益分岐確率</th><th scope="col" class="num">期待払戻</th><th scope="col" class="num">期待損益</th><th scope="col">操作</th></tr></thead><tbody id="resultsBody"></tbody></table></div></section>
+<section class="panel" aria-labelledby="csvHeading"><div class="panel-head"><h2 id="csvHeading">CSVで保存・一括入力</h2></div><div class="panel-body"><p class="muted">出力は両競技の登録済みデータを含みます。読込は全行検証後に追加し、競技ごとに振り分けます。</p><div class="csv-controls"><button id="exportCsv" type="button" disabled>全件をCSV出力</button><div class="field"><label for="importFile">CSVファイル（UTF-8、2MiBまで）</label><input id="importFile" type="file" accept=".csv,text/csv"></div></div><p class="status" id="status" role="status" aria-live="polite">登録済み0件。保存・読込はこの端末内で完結します。</p><div id="csvError" role="alert" class="error-box"></div><small>読込エラー時は1行も追加しません。同じCSVの再読込は重複追加になります。</small></div>
+<details><summary>CSV v1の列・単位と安全な文字列</summary><p>UTF-8 BOM付き、全セル引用符囲み、CRLF。確率・EV・損益分岐確率は割合（24% → 0.24）です。形式バージョンは1、出所・時刻は必須です。計算結果列は空欄なら再計算、値がある場合は再計算値と照合します。</p><p class="csv-head" id="csvColumns"></p><p>数式として解釈される文字列と先頭アポストロフィは、先頭にアポストロフィを追加し読込時に元へ戻します。Excel等で再保存する場合は列の自動型変換にご注意ください。Shift_JISは受け付けません。最大5,000行です。</p></details></section>
+<section class="panel"><details open><summary>計算式とPhase 1の範囲</summary><p>p = 入力した的中確率 ÷ 100<br>EV = p × オッズ − 1<br>損益分岐確率 = 1 ÷ オッズ<br>期待払戻 = 購入金額 × p × オッズ<br>期待損益 = 購入金額 × EV</p><p>例: 24%・5.2倍・1,000円 → EV +24.8%、期待払戻1,248円、期待損益+248円。</p><p>出走数は競馬2〜18頭、競輪7車・9車。馬番・車番の単一買い目を扱います。枠連・枠単・重勝式、同着・返還・払戻の変動幅、予測モデル、公式オッズ取得は対象外です。各買い目は的中／外れの2状態で計算します。</p><p>異なる買い目の的中事象は重なる場合があり、確率の合計100%は強制しません。表示は率の小数第4位・円の小数第2位までです。表示桁より小さな値は0に見える場合があります。CSVには丸め前の値を保存します。</p></details></section>
+</div></div>
+</div>
+<section id="historyView" hidden aria-labelledby="historyHeading">
+<h2 id="historyHeading" tabindex="-1">過去レースの記録・検証</h2>
+<p class="history-intro">CSVで取り込んだ開催情報・購入前オッズ・確定結果を照合します。入力した確率は仮定値です。結果との差を、予測精度が確認された証拠とは扱いません。</p>
+<aside class="notice"><strong>時刻と取得元は、CSVに記載された利用者の申告値です。</strong><p>時刻関係の検査だけでは、予測が事前に存在したことやデータの真正性は証明できません。購入前オッズを確定オッズで補完しません。返還・取消・同着は未評価です。</p></aside>
+<section class="panel"><div class="panel-head"><h3>1. CSVで記録を取り込む</h3></div><div class="panel-body"><p>保存はCSVで行います。画面を閉じると記録は消えます。Phase 1のCSVとは形式が異なります。</p><div class="csv-controls"><div class="field"><label for="historyFile">Phase 2 CSV（UTF-8、2MiB・5,000件まで）</label><input id="historyFile" type="file" accept=".csv,text/csv"></div><button id="historyExport" type="button" disabled>全記録をCSV出力</button></div><div class="actions history-actions"><button id="historyTemplate" type="button">空のCSVテンプレートを保存</button><button id="historyExample" type="button">架空テストCSVを保存</button></div><p class="sources">出力は絞り込みに関係なく両競技・両データ区分の全件です。読込は追加方式。重複・不正行があれば全件を追加せず既存記録を保護します。</p><p id="historyStatus" class="status" role="status" aria-live="polite">記録0件。データは自動取得・補完しません。</p><div id="historyError" class="error-box" role="alert"></div></div>
+<details><summary>CSVの書き方・必須項目・状態</summary><p>必須値: レコードID、データ区分（REAL/SYNTHETIC）、競技（競馬/競輪）、レースID、券種、組み合わせ。その他は欠損のまま保存できますが、判定に必要な情報が不足すると未評価になります。列名と列順はすべて必須です。</p><p>事前確率は割合（24% → 0.24）。番号は半角ハイフン区切り。払戻金は対象買い目の<strong>100円当たり元本込み払戻金</strong>。時刻は秒・タイムゾーン付き（例: 2026-10-01T11:30:00+09:00）。結果状態はUNKNOWN/PROVISIONAL/FINAL/REFUND/CANCELLED/DEAD_HEAT、照合用的中判定はHIT/MISS/空欄。確率出所はMANUAL_ASSUMPTION/EXTERNAL_UNVERIFIED/空欄。</p><p>同じレースに複数買い目を登録できます。同じレコードID・同じ購入時点の買い目、同一レースの矛盾する結果や出走情報、別IDでの同一開催情報は拒否します。未確定行を自動更新しません。更新時はCSVを編集して新しい空の画面へ取り込んでください。</p><p>最後の9列は算出列です。手入力時は空欄にできます。値がある場合は再計算して照合します。日本語・引用符・カンマ・改行を保持し、数式起点文字をエスケープします。Excel実機での確認はMANUAL_REQUIREDです。</p><p id="historyColumns" class="csv-head"></p></details></section>
+<section class="panel history-filter-panel"><div class="panel-head"><h3>2. 表示する記録を選ぶ</h3></div><div class="panel-body"><div class="history-filters"><div class="field"><label for="historyKind">データ区分（混合集計なし）</label><select id="historyKind"><option value="REAL">実データ（出所未監査）</option><option value="SYNTHETIC">架空テストのみ</option></select></div><div class="field"><label for="historySport">競技</label><select id="historySport"><option value="">両競技</option><option value="horse">競馬</option><option value="keirin">競輪</option></select></div><div class="field"><label for="historyFrom">開催日・開始</label><input type="date" id="historyFrom"></div><div class="field"><label for="historyTo">開催日・終了</label><input type="date" id="historyTo"></div><div class="field"><label for="historyBet">券種</label><select id="historyBet"><option value="">全券種</option></select></div><button id="historyResetFilters" type="button">絞り込み解除</button></div><p id="historyKindNotice" class="warn"></p><div id="historyFilterError" role="alert" class="error-box"></div></div></section>
+<section class="panel history-summary-panel"><div class="panel-head"><h3>3. 実現収支（評価できた記録だけ）</h3></div><div class="panel-body"><p id="historyCounts" role="status" class="result-meta">表示0件</p><dl class="history-metrics"><div class="metric"><dt>評価済み投資額</dt><dd id="historyInvestment">—</dd></div><div class="metric"><dt>実現払戻</dt><dd id="historyPayout">—</dd></div><div class="metric"><dt>実現損益</dt><dd id="historyProfit">—</dd></div><div class="metric"><dt>実現回収率</dt><dd id="historyReturn">—</dd></div></dl><p class="sources">回収率 = 払戻 ÷ 投資。100%が損益分岐です。未評価行はこの分母に含めません。回収率や的中率を保証するものではありません。</p><p id="historyUnresolved" class="warn"></p>
+<div class="history-comparison"><h3>事前EVと実現損益の比較</h3><p id="historyComparisonScope" class="sources"></p><dl class="history-metrics comparison-metrics"><div class="metric"><dt>比較対象の予測期待損益</dt><dd id="historyForecastProfit">—</dd></div><div class="metric"><dt>同じ対象の実現損益</dt><dd id="historyComparedActual">—</dd></div><div class="metric"><dt>実現 − 予測期待損益</dt><dd id="historyGap">—</dd></div></dl><p class="sources">予測EVと実績の双方がそろう同一行だけで比較します。確率・事前時点の証拠がなければ予測未評価です。校正・Brier Score・予測的中率は算出しません。</p></div></div></section>
+<section class="history-list-section" aria-labelledby="historyListHeading"><h3 id="historyListHeading">レース単位の一覧</h3><p class="sources">レースを開くと買い目、予測EV、実現損益、入力値・取得元・未評価理由を確認できます。表は横へスクロールできます。</p><div id="historyRaces"></div></section>
+</section>
+
+<section id="qualityView" hidden aria-labelledby="qualityHeading">
+<h2 id="qualityHeading" tabindex="-1">データ取込・品質検証</h2>
+<p class="history-intro">元CSV → 明示した列変換 → 品質検査 → 確定追加。欠損は空欄のまま保持します。保存するまで端末のメモリ内だけにあり、画面を閉じると消えます。</p>
+<aside class="notice"><strong>REALは「実データ」という申告区分です。公式確認済みを意味しません。</strong><p>時刻は利用者の申告・端末時計です。ハッシュは変更検出と再現のために使い、外部での取得時刻やデータの真正性を証明しません。予測精度の検証・モデル学習・自動購入判断は行いません。</p></aside>
+<section class="panel"><div class="panel-head"><h3>1. 取込元と形式を指定</h3></div><div class="panel-body">
+<div class="q-grid" id="qualityConfig">
+<div class="field"><label for="qualityFile">元CSV（UTF-8、2MiB・5,000件まで）</label><input id="qualityFile" type="file" accept=".csv,text/csv"></div>
+<div class="field"><label for="qualityMode">入力形式</label><select id="qualityMode"><option value="standard">標準CSV v2（39列・変更なし）</option><option value="mapped">別形式CSV（変換定義を指定）</option></select></div>
+<div class="field"><label for="qualitySource">出所ラベル（必須・利用者申告）</label><input id="qualitySource" type="text" maxlength="1000" placeholder="取得元と取得経路を記入"></div>
+<div class="field"><label for="qualityAsOf">事前入力情報の基準時刻（申告・任意）</label><input id="qualityAsOf" type="text" placeholder="2026-10-01T11:00:00+09:00" aria-describedby="qualityAsOfHelp"></div>
+</div>
+<p id="qualityAsOfHelp" class="q-note">事前入力項目がこの時点までの情報であるという申告です。結果を含むCSV全体の取得時刻ではありません。予測時刻より後・未入力の場合は、事前EV比較の対象から除外します。</p>
+<div id="qualityMapping" hidden>
+<div class="q-toolbar"><div class="field"><label for="qualityProfileFile">変換定義JSON（64KiBまで）</label><input id="qualityProfileFile" type="file" accept=".json,application/json"></div><button id="qualityExampleProfile" type="button">架空例の変換定義を表示</button><button id="qualitySaveProfile" type="button">定義を保存</button></div>
+<div class="field"><label for="qualityProfile">変換定義JSON（元列名・変換・単位を明示）</label><textarea id="qualityProfile" spellcheck="false" aria-describedby="qualityProfileHelp"></textarea></div>
+<p id="qualityProfileHelp" class="q-note">払戻は100円当たりの元本込み金額へ変換します。payout変換のbaseYenに元データの購入基準額を指定してください。オッズと払戻に同じ列は使えません。未割当は欠損です。推測による対応付けは行いません。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="変換対応表（横スクロール可能）"><table class="q-table"><thead><tr><th>標準項目</th><th>元列 / 定数</th><th>変換・単位</th><th>値の対応</th></tr></thead><tbody id="qualityMappingRows"></tbody></table></div>
+</div>
+<div class="q-toolbar"><button id="qualityInspect" type="button">品質を検査</button><button id="qualityCommit" type="button" disabled>検査結果を確定追加</button><button id="qualityExampleCSV" type="button">架空の別形式CSVを保存</button></div>
+<p class="q-note">架空例は公式提供形式ではありません。検査後に入力を変えると再検査が必要です。異常が1件でもあれば追加0件。未評価行は未評価のまま確定できます。</p>
+<p id="qualityStatus" role="status" aria-live="polite" class="status">確定済み0件。CSVを選択して検査してください。</p><div id="qualityError" class="error-box" role="alert"></div>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>2. 検査結果を確認</h3></div><div class="panel-body">
+<div class="q-toolbar"><div class="field"><label for="qualityScope">表示対象</label><select id="qualityScope"><option value="committed">確定済みデータ</option><option value="stage">今回の検査プレビュー</option></select></div><div class="field"><label for="qualityKind">データ区分（合算しません）</label><select id="qualityKind"><option value="REAL">REAL（実データ申告・公式未確認）</option><option value="SYNTHETIC">SYNTHETIC（架空テスト）</option></select></div></div>
+<p id="qualityKindNotice" class="q-warning"></p><p id="qualityCounts" role="status" class="result-meta"></p>
+<dl class="q-metrics"><div class="metric"><dt>選択区分の件数</dt><dd id="qualityTotal">0件</dd></div><div class="metric"><dt>正常（形式・時点条件）</dt><dd id="qualityNormal">0件</dd></div><div class="metric"><dt>異常</dt><dd id="qualityInvalid">0件</dd></div><div class="metric"><dt>未評価</dt><dd id="qualityUnevaluated">0件</dd></div><div class="metric"><dt>欠損率（固定21項目）</dt><dd id="qualityMissing">—</dd></div><div class="metric"><dt>事前EV比較に利用可能</dt><dd id="qualityEligible">0件</dd></div></dl>
+<p id="qualitySports" class="sources"></p><p class="q-note">正常は公式監査済みを意味しません。比較利用可能件数は、事前確率と通常結果の評価に加え、オッズ取得時刻・事前情報基準時刻が予測以前である行のみです。最終オッズや結果から事前情報を補完しません。</p>
+<h4>データ出所（選択区分のみ）</h4><ul id="qualitySources" class="q-sources"></ul>
+<div class="table-scroll" tabindex="0" role="region" aria-label="品質検査一覧（横スクロール可能）"><table class="q-table"><caption>100件ずつ表示。詳細に元CSVレコード番号・欠損・入力値・ハッシュを表示します。</caption><thead><tr><th>元レコード / ID</th><th>競技 / レース / 買い目</th><th>品質状態</th><th>比較適合行の予測EV / 実現損益</th><th>警告・エラー / 詳細</th></tr></thead><tbody id="qualityRows"></tbody></table></div>
+<div class="q-pages"><button id="qualityPrev" type="button" disabled>前の100件</button><span id="qualityPage"></span><button id="qualityNext" type="button" disabled>次の100件</button></div>
+<p class="q-note">元CSVレコード番号はヘッダを1とする論理レコード番号です。セル内改行のあるCSVではテキスト行番号と一致しません。詳細を含む全件は検査報告JSONに保存できます。</p>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>3. 保存・再読込</h3></div><div class="panel-body">
+<p>スナップショットJSONは元CSV・変換定義・追跡情報・事前入力ハッシュをまとめて保存します。再読込で元CSVから再現し、各ハッシュを照合してから追加します。</p>
+<div class="q-toolbar"><button id="qualityExport" type="button" disabled>確定済み全件をCSV v2出力</button><button id="qualitySnapshot" type="button" disabled>スナップショットJSONを保存</button><button id="qualityReport" type="button" disabled>表示対象の検査報告JSONを保存</button><button id="qualityConverted" type="button" disabled>今回の未確定変換CSVを保存</button></div>
+<div class="field"><label for="qualityAuditFile">スナップショットJSONを再読込（8MiBまで・追加方式）</label><input id="qualityAuditFile" type="file" accept=".json,application/json"></div>
+<p class="q-note">CSV出力は絞り込みに関係なく両競技・両区分の全件です。標準39列に追跡列は追加しません。既存の「過去レースの記録・検証」で読み込めますが、3A固有の厳格な比較適合判定と追跡の保持にはこの画面とJSONを使ってください。未確定変換CSVは異常を修正したデータではありません。</p>
+<details><summary>ハッシュ・時刻の限界と実データの検証範囲</summary><p>自己申告した時刻やSHA-256だけでは、公式内容や外部取得時刻の真正性を証明できません。ハッシュを含む内容を整合的に作り直した変更を防ぐ署名ではありません。事前スナップショットは結果・払戻・確定オッズ等を除外した許可項目だけです。元CSV原文は監査領域であり、そのまま将来モデルの入力にしてはいけません。</p><p>公式提供元の実CSV・公表時刻の履歴が未提供のため、同梱例による検証は架空データの機能試験です。実データ照合・予測精度検証は未実施です。返還・取消・同着・欠損は未評価のまま区別します。</p></details>
+</div></section>
+</section>
+
+<section id="modelView" hidden aria-labelledby="modelHeading">
+<p class="model-label">SYNTHETIC DEMO / 実予測・実戦成績ではありません</p>
+<h2 id="modelHeading" tabindex="-1">確率分布・評価・バックテストの基盤</h2>
+<p class="history-intro">未学習の均等確率を使い、保存・照合・評価の動作を確認します。実際の予測能力、的中率、回収率、利益は確認されていません。</p>
+<aside class="notice"><strong>新しいモデル画面は架空データ専用です。REALは受け付けません。</strong><p>監査用のCSV/結果と、モデル用の事前特徴量を分離します。ハッシュと自己申告時刻は、外部取得時刻や事前に予測が存在したことの真正性を証明しません。画面を閉じるとデータは消えるため、JSONで保存してください。</p></aside>
+<section class="panel"><div class="panel-head"><h3>1. 架空データを用意する</h3></div><div class="panel-body">
+<div class="model-toolbar"><button type="button" id="modelDemo">固定の架空検証例で全件置換</button><div class="field"><label for="modelFile">モデルJSONを読み込む（4MiBまで）</label><input id="modelFile" type="file" accept=".json,application/json"></div></div>
+<p class="sources">読込は全件置換です。ハッシュ・分布・時刻・区間の検証に成功した場合だけ置き換えます。失敗時は現在のデータを保持します。固定例には予測欠損・結果欠損・返還・手数料不明も含みます。購入済みと記載した例もすべて架空購入です。</p>
+<details><summary>事前特徴量から新しい均等予測を作る（SYNTHETIC DEMO）</summary>
+<p>結果を含まないFEATURE_SET_V1だけから作成します。予測の記録時刻には端末の現在時刻を使い、開始済みのレースへの後付け作成は拒否します。予測がないレースは評価時に自動生成しません。</p>
+<div class="model-grid"><div class="field"><label for="modelInputSport">架空入力例の競技</label><select id="modelInputSport"><option value="horse">競馬・単勝</option><option value="keirin">競輪・2車単</option></select></div><div class="field"><label for="modelInputCount">架空入力例の出走数</label><select id="modelInputCount"></select></div></div>
+<div class="model-toolbar"><button id="modelFeatureExample" type="button">架空の事前入力例を表示</button></div>
+<div class="field"><label for="modelFeatureText">特徴量JSON（256KiBまで）</label><textarea id="modelFeatureText" spellcheck="false"></textarea></div>
+<div class="model-toolbar"><button id="modelCreate" type="button">均等予測を記録する</button></div>
+<p class="sources">例の安定IDは未取得のためnullです。出走番号を馬・選手の安定IDとして代用しません。均等モデルは個体の履歴を使いません。新しい予測はtest区間に追加し、結果は未評価のままです。</p>
+</details>
+<p id="modelStatus" class="status" role="status" aria-live="polite">モデルデータ0件。自動取込・事後予測生成は行いません。</p><div id="modelError" class="error-box" role="alert"></div>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>2. 保存した事前予測を確認</h3></div><div class="panel-body">
+<div class="field"><label for="modelRace">予測スナップショット</label><select id="modelRace"><option value="">記録なし</option></select></div>
+<p id="modelPredictionInfo" class="model-subtitle"></p><p id="modelDistributionSum" class="status"></p><ul id="modelPredictionWarnings" class="model-warning-list"></ul>
+<div class="table-scroll" tabindex="0" role="region" aria-label="架空確率分布（横スクロール可能）"><table class="model-table model-distribution"><caption>SYNTHETIC DEMO — 全クラスの分布。表示丸め前の合計を検証します。</caption><thead><tr><th>券種</th><th>組み合わせ</th><th>確率</th></tr></thead><tbody id="modelDistributionRows"></tbody></table></div>
+<details><summary>モデル特徴量・取得時刻・欠損・ハッシュ</summary><div id="modelFeatureDetails" class="model-feature"></div></details>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>3. 予測評価（SYNTHETIC DEMO）</h3></div><div class="panel-body">
+<div class="model-toolbar"><div class="field"><label for="modelRole">評価区間（trainは評価しません）</label><select id="modelRole"><option value="test">test</option><option value="validation">validation</option></select></div><div class="field"><label for="modelSport">表示競技</label><select id="modelSport"><option value="">両競技（別集計）</option><option value="horse">競馬</option><option value="keirin">競輪</option></select></div></div>
+<p id="modelSplitInfo" class="sources"></p><p id="modelEvaluationCounts" class="status" role="status"></p><p id="modelMissing" class="warn"></p>
+<div id="modelGroupResults"></div>
+<p class="sources">Brierは多クラスの二乗誤差を合計してレースで平均します（クラス数では割りません）。Log Lossは自然対数。確率0で正解した場合は∞、未評価は—です。損失は小さいほどよく、候補−均等基準の差が負なら小さい損失です。均等モデルと同じ分布では差は0です。</p>
+<p class="sources">校正表は全クラス対の集計です。頭数/車数が異なる場合も各クラス対を数えます。均等分布ではクラス全体の平均頻度が機械的に一致し、ECE=0になる場合があります。それだけで予測能力は確認できません。ここに示す架空の校正や損失は、実予測精度の確認・将来成績の保証ではありません。</p>
+<details><summary>レースごとのラベル・未評価理由</summary><div class="table-scroll" tabindex="0" role="region" aria-label="架空評価のレース一覧"><table class="model-table"><thead><tr><th>競技・レース</th><th>券種</th><th>評価/ラベル</th><th>Brier</th><th>Log Loss</th><th>未評価理由</th></tr></thead><tbody id="modelEvaluationRows"></tbody></table></div></details>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>4. 保存予測と実現値の照合（SYNTHETIC DEMO）</h3></div><div class="panel-body">
+<p class="model-label">架空購入と仮想購入を別集計。実際の購入・実戦回収率ではありません。</p><div id="modelBacktest"></div>
+<p class="sources">評価できた同一行だけで比較します。投資=購入額+明示手数料、実現払戻=購入額÷100×100円当たり元本込み払戻。回収率=払戻÷投資。予測期待損益は購入前オッズを使い、確定オッズや払戻から予測を作りません。手数料・払戻方針不明、欠損、返還・取消・同着は未評価です。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="架空バックテスト明細"><table class="model-table"><thead><tr><th>買い目ID / レース</th><th>購入状態</th><th>手数料前EV</th><th>予測期待損益</th><th>実現損益</th><th>判定 / 未評価理由</th></tr></thead><tbody id="modelTicketRows"></tbody></table></div>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>5. 保存する</h3></div><div class="panel-body"><div class="model-toolbar"><button id="modelExport" type="button" disabled>モデル全件JSONを保存</button><button id="modelReport" type="button" disabled>現在区間・全競技の評価JSONを保存</button><button id="modelPredictionExport" type="button" disabled>選択予測JSONを保存</button></div><p class="sources">CSV v2は従来画面で維持します。モデル用JSONには全分布・特徴量来歴・時間分離・予測ハッシュを別保存します。Phase 3A監査JSONから特徴量を自動抽出しません。実データ学習へ進むには、利用許諾、公式照合、安定ID、時点が確認できる特徴量と事前オッズ履歴、独立した時系列評価区間が必要です。</p></div></section>
+</section>
+
+<section id="abilityView" hidden aria-labelledby="abilityHeading">
+ <h2 id="abilityHeading" tabindex="-1">ユニの能力分析を比較する</h2>
+ <p class="history-intro">分析JSONを貼付 → プレビュー → 確定追加。オッズ・勝率は不要です。</p>
+ <div class="notice"><p><strong>SYNTHETIC DEMO専用 · REAL入力は停止中</strong></p><p>0〜100点はレース内の暫定相対評価です。勝率ではありません。根拠率が異なる点数の単純比較には注意が必要です。</p><p>自動保存はありません。閉じる前にJSONを手元へ保存してください。</p></div>
+ <div class="ability-layout">
+ <section class="panel"><div class="panel-head"><h3>1. 分析結果を登録</h3></div><div class="panel-body">
+  <div class="actions"><button id="abilityHorseSample">競馬の架空入力例</button><button id="abilityKeirinSample">競輪の架空入力例</button></div>
+  <div class="field"><label for="abilityInput">ユニの分析JSON / 能力CSV</label><textarea id="abilityInput" rows="8" spellcheck="false" placeholder="JSON・コードフェンス付きJSONを貼り付けてください"></textarea><small>RACELAB_ABILITY_V1 · UTF-8 1MB以内。JSONコードフェンスの前後にある説明文は取込対象外です。</small></div>
+  <div class="actions"><button id="abilityImport" class="primary">プレビューで検証</button><button id="abilityCommit" disabled>確定追加</button></div>
+  <div class="field"><label for="abilityFile">JSON / CSVファイルを選ぶ</label><input id="abilityFile" type="file" accept=".json,.csv,application/json,text/csv"></div>
+  <div id="abilityPreview" hidden class="ability-preview" aria-labelledby="abilityPreviewHeading"><h3 id="abilityPreviewHeading">取込前プレビュー</h3><p id="abilityPreviewInfo"></p><div id="abilityPreviewRows"></div><p class="basis">まだ登録されていません。内容を確認して「確定追加」を押してください。</p></div>
+  <p id="abilityError" class="error-box" role="alert"></p><p id="abilityStatus" class="status" role="status" aria-live="polite">貼り付けまたは架空入力例から始めてください。</p>
+  <details id="abilityPromptDetails"><summary>ユニへ渡す分析プロンプト</summary><div class="field"><label for="abilityPromptSport">分析する競技</label><select id="abilityPromptSport"><option value="horse">競馬</option><option value="keirin">競輪</option></select></div><p>資料を読めない場合は不足情報を確認し、事実を捏造せず未評価にする依頼文です。実在情報を架空扱いして入力しないでください。</p><textarea id="abilityPrompt" rows="7" readonly aria-label="ユニ分析プロンプト"></textarea><div class="actions"><button id="abilityCopyPrompt">依頼文をコピー</button><button id="abilitySavePrompt">依頼文を保存</button><button id="abilityTemplate">互換JSON見本を保存</button></div></details>
+ </div></section>
+ <section class="panel"><div class="panel-head"><h3>2. 全員の能力を比較</h3><span id="abilityCount" class="result-meta">0レース</span></div><div class="panel-body">
+  <div class="pair"><div class="field"><label for="abilitySport">競技</label><select id="abilitySport"><option value="all">すべて</option><option value="horse">競馬</option><option value="keirin">競輪</option></select></div><div class="field"><label for="abilitySort">点数の表示順</label><select id="abilitySort"><option value="desc">高い順</option><option value="asc">低い順</option></select></div></div>
+  <div class="field"><label for="abilityRace">レース</label><select id="abilityRace"><option value="">登録なし</option></select></div>
+  <p id="abilityRaceInfo" class="ability-text"></p><div id="abilityLines" class="ability-lines" aria-label="レース単位のライン構成"></div>
+  <details><summary>採点ルール・根拠不足</summary><p id="abilityRule" class="ability-text"></p><ul id="abilityWarnings" class="warn"></ul></details><p id="abilityWarningCount" class="warn"></p>
+  <div id="abilityRanking" class="ability-ranking" aria-label="全出走者の暫定順位"></div>
+  <p class="basis">根拠率＝評価済項目の重み合計。総合点は評価済項目内で重みを再配分。情報不足を0点にしていません。全項目不足は未評価。根拠率が同じでも評価対象項目の違いに注意してください。</p>
+  <div id="abilityCards" class="ability-cards"><p class="muted">登録すると全員の順位と詳細を確認できます。</p></div>
+  <div class="actions ability-save"><button id="abilitySaveJSON" disabled>JSON保存</button><button id="abilitySaveCSV" disabled>能力CSV保存</button></div>
+  <p class="basis">全レースを保存します。再読込は新しく開いた画面で行ってください。同じレースの重複追加は拒否します。JSONハッシュは改変検知用で、出所・時刻の真正性は証明しません。</p>
+ </div></section>
+ </div>
+ <section id="abilityEditor" class="panel" hidden aria-labelledby="abilityEditHeading"><div class="panel-head"><h3 id="abilityEditHeading">3. 点数・理由を手修正</h3></div><div class="panel-body">
+  <p id="abilityEditName"></p><p class="basis">原評価の項目点・根拠は保持します。修正した総合点はUSER上書きとして区別します。</p>
+  <div class="field"><label for="abilityEditScore">総合能力点（0〜100・不明なら空欄）</label><input id="abilityEditScore" type="number" min="0" max="100" step="any" inputmode="decimal"></div>
+  <div class="field"><label for="abilityEditReason">修正後の評価理由</label><textarea id="abilityEditReason" rows="5"></textarea></div>
+  <div class="field"><label for="abilityEditContext">条件・ラインの所見（個人能力と別）</label><textarea id="abilityEditContext" rows="3"></textarea></div>
+  <div class="actions"><button id="abilityEditSave" class="primary">履歴を残して保存</button><button id="abilityEditCancel">キャンセル</button></div>
+ </div></section>
+</section>
+
+<section id="manualView" hidden aria-labelledby="manualHeading">
+<h2 id="manualHeading" tabindex="-1">実レース・手動能力分析</h2>
+<p class="history-intro">許諾台帳を確認 → 分析JSONを貼付 → プレビュー → 確定。オッズ・勝率は不要です。</p>
+<div class="notice"><p id="manualKindNotice"></p><p>条件確認は利用者の申告です。提供元の正式許諾を認証していません。自動通信・外部AI送信・Drive同期はありません。</p><p>旧V1の架空テスト、モデル、変換ツールのREAL拒否は維持しています。</p></div>
+<div class="manual-grid">
+<section class="panel"><div class="panel-head"><h3>1. 許諾と保存範囲</h3></div><div class="panel-body">
+<div class="field"><label for="manualKind">保存・表示する区分（合算しません）</label><select id="manualKind"><option value="REAL">実レース（REAL）</option><option value="TEST_FIXTURE">検証用資料（TEST_FIXTURE・架空）</option></select></div>
+<div class="actions"><button id="manualHorseFixture">競馬の架空検証を試す</button><button id="manualKeirinFixture">競輪の架空検証を試す</button></div>
+<p class="basis">架空検証ボタンはTEST_FIXTUREへ切り替えます。REALデータは付属していません。</p>
+<div class="field"><label for="manualStorage">同期対象外のローカル保存場所（環境申告）</label><input id="manualStorage" placeholder="C:\RaceLabLocal\manual" autocomplete="off"></div>
+<label class="manual-check"><input id="manualUnsynced" type="checkbox">この保存先が自動同期対象外で、台帳の許可範囲内であることを確認した</label>
+<div class="field"><label for="manualPolicy">用途別の許諾台帳JSON</label><textarea id="manualPolicy" rows="7" spellcheck="false"></textarea></div>
+<div class="field"><label for="manualPolicyFile">台帳JSONを読込（保存JSONから台帳だけ取り出すことも可能）</label><input id="manualPolicyFile" type="file" accept=".json,application/json"></div>
+<div class="actions"><button id="manualPolicyTemplate">未確認の台帳テンプレート</button><button id="manualGate" class="primary">条件と保存範囲を確認</button></div><p id="manualGateStatus" class="status" role="status"></p>
+<details><summary>短い依頼文・テンプレート</summary><div class="field"><label for="manualPromptSport">競技</label><select id="manualPromptSport"><option value="horse">競馬</option><option value="keirin">競輪</option></select></div><textarea id="manualPrompt" readonly rows="7" aria-label="短い実行用プロンプト"></textarea><div class="actions"><button id="manualCopyPrompt">短い依頼文をコピー</button><button id="manualSavePrompt">短い依頼文を保存</button><button id="manualTemplate">空のV2 JSON見本を保存</button><button id="manualRepair">修正依頼テンプレートを保存</button></div><p>詳細仕様と採点ルールはZIP内docs、互換見本はtemplatesにあります。依頼文に実データは埋め込んでいません。</p></details>
+</div></section>
+<section class="panel"><div class="panel-head"><h3>2. 分析を登録・比較</h3><span id="manualCount">0レース</span></div><div class="panel-body">
+<fieldset id="manualPayload" disabled><legend>許諾条件確認後に利用できます</legend><div class="field"><label for="manualInput">分析テキスト内のJSON / 保存JSON / V2 CSV</label><textarea id="manualInput" rows="7" spellcheck="false"></textarea></div><div class="field"><label for="manualFile">ファイルを選択</label><input id="manualFile" type="file" accept=".json,.csv"></div><div class="actions"><button id="manualPreviewButton">プレビューで検証</button><button id="manualCommit" disabled>確定追加</button></div></fieldset>
+<div id="manualPreview" hidden class="manual-preview"></div><p id="manualError" class="error-box" role="alert"></p><p id="manualStatus" class="status" role="status"></p>
+<div class="field"><label for="manualRace">レース（現在の区分のみ）</label><select id="manualRace"></select></div><p id="manualRaceInfo" class="ability-text"></p><div id="manualLines" class="ability-lines"></div><div id="manualRanking" class="ability-ranking"></div><div id="manualDetails"></div>
+<p class="basis">点数は未校正の相対評価。根拠率は情報の充足度であり、信頼度・的中確率ではありません。根拠率や対象項目の異なる順位は参考です。情報不足を0点にしません。</p>
+<div class="actions"><button id="manualJSON" disabled>ローカルJSON保存</button><button id="manualCSV" disabled>V2 CSV保存</button><button id="manualTXT" disabled>テキスト分析保存</button><button id="manualCopy" disabled>分析文＋JSONを一括コピー</button></div><p id="manualCopyNotice" class="basis"></p>
+<details><summary>人間が読める分析結果・一括出力</summary><textarea id="manualText" readonly rows="12" aria-label="全出走者のテキスト分析"></textarea></details>
+</div></section>
+</div>
+<section id="manualEditor" class="panel" hidden><div class="panel-head"><h3>USER手修正（原評価は保持）</h3></div><div class="panel-body"><p id="manualEditName"></p><div class="field"><label for="manualEditScore">総合点（0〜100・不明は空欄）</label><input id="manualEditScore" type="number" min="0" max="100" step="any"></div><div class="field"><label for="manualEditReason">修正理由</label><textarea id="manualEditReason" rows="3"></textarea></div><div class="field"><label for="manualEditContext">条件・ライン所見（個人点と分離）</label><textarea id="manualEditContext" rows="3"></textarea></div><button id="manualEditSave">履歴を残して保存</button><button id="manualEditCancel">キャンセル</button></div></section>
+</section>
+
+<section id="prepView" hidden aria-labelledby="prepHeading" class="prep">
+ <div class="card"><h2 id="prepHeading" tabindex="-1">① レース情報を整理 → ② ユニへ依頼 → ③ V2を検証</h2><p>オッズなしで全員を比較できます。能力点は勝率ではありません。情報を自動取得・送信しません。</p><p class="warn">REALは実在情報、TEST_FIXTUREは独自架空資料です。許諾は利用者の確認申告であり、正式認証ではありません。実レース原本を開発者へ送らず、同期対象外のPCで扱ってください。</p>
+ <div class="prep-grid"><label>資料区分<select id="prepKind"><option value="REAL">REAL・実レース手入力</option><option value="TEST_FIXTURE">TEST_FIXTURE・架空検証</option></select></label><label>競技<select id="prepSport"><option value="horse">競馬</option><option value="keirin">競輪</option></select></label><label>出走数<input id="prepCount" type="number" min="1" max="18" value="18"></label><button id="prepNew">空のレースを作成</button></div><p>作成・復元は現在の編集欄を置き換えます。登録済みV2は保持します。</p><div class="prep-actions"><button id="prepHorse18">架空18頭で試す</button><button id="prepKeirin7">架空7車で試す</button><button id="prepKeirin9">架空9車で試す</button></div><p id="prepMessage" role="status" aria-live="polite"></p><p id="prepError" role="alert"></p></div>
+ <div class="card"><h3>1. 保存場所と資料の利用条件</h3><label>同期対象外の保存先（申告）<input id="prepStorage" placeholder="C:\RaceLabLocal\manual"></label><label><input id="prepUnsynced" type="checkbox">この保存先がDrive・OneDrive等の自動同期対象外と確認した</label><p>保存先はブラウザで強制できません。保存ダイアログでも同じ場所を指定してください。クラウド転送機能はありません。</p>
+ <details><summary>1資料の台帳入力を支援（複数資料は下のJSONで管理）</summary><div class="prep-grid"><label>資料名<input id="prepSourceLabel"></label><label>参照先<input id="prepSourceReference" placeholder="URL・手入力資料名等"></label><label>規約・許諾の参照先<input id="prepTerms"></label><label>確認者<input id="prepReviewer"></label><label>許諾確認時刻<input id="prepReviewed" placeholder="2026-10-23T10:00:00+09:00"></label><label>利用期限<input id="prepValid"></label><label>保存期限<input id="prepRetention"></label><label>許可されたローカルルート<input id="prepRoot" placeholder="C:\RaceLabLocal"></label><label>用途確認の根拠参照<input id="prepPermissionEvidence"></label><label>ローカル分析<select id="prepLocalAnalysis"><option>UNCONFIRMED</option><option>CONFIRMED</option><option>DENIED</option></select></label><label>ローカル保存<select id="prepLocalStorage"><option>UNCONFIRMED</option><option>CONFIRMED</option><option>DENIED</option></select></label><label>外部AI提示<select id="prepExternalAI"><option>UNCONFIRMED</option><option>CONFIRMED</option><option>DENIED</option></select></label></div><button id="prepSourceApply">入力した1資料で台帳を置換</button></details>
+ <details><summary>用途別台帳JSON（原本は依頼文へ含めません）</summary><label>RACELAB_LOCAL_RIGHTS_V1<textarea id="prepPolicy" rows="8" spellcheck="false"></textarea></label><p>準備中はUSER_ONLYでローカル用途を検査。依頼時はEXTERNAL_AI確認済み資料だけを選び、外部用途を再検査します。未確認の出走表なら依頼作成を止めます。</p></details></div>
+ <div class="card"><h3>2. レースと全出走者</h3><div class="prep-grid"><label>レースID<input id="prepRaceId"></label><label>レース名<input id="prepRaceName"></label><label>開催日<input id="prepDate" type="date"></label><label>会場<input id="prepVenue"></label><label>レース番号<input id="prepRaceNo" type="number" min="1" max="99"></label><label>評価基準時刻<input id="prepCutoff" placeholder="2026-10-23T13:00:00+09:00"></label><label>開始予定時刻<input id="prepStarts" placeholder="2026-10-23T14:00:00+09:00"></label></div><div id="prepConditions" class="prep-grid"></div><label>全員の番号・名前・安定ID（1行1人、カンマ区切り。ID不明は空欄）<textarea id="prepRoster" rows="6" placeholder="1,名前,&#10;2,名前,"></textarea></label><button id="prepApplyRoster">全員の一覧を反映</button><label><input id="prepRosterComplete" type="checkbox">出走者全員を確認した（取消等で未特定の人を補完しない）</label><label>未確認事項（1行1件）<textarea id="prepUnknowns" rows="2"></textarea></label></div>
+ <div class="card"><h3>3. 出所・時刻と能力項目の記載情報</h3><p>確認時刻だけで公表時刻の証明にはなりません。不明は空欄。直近走は同じ資料内に3〜5走分を記載でき、未取得分は補完しません。</p><div class="prep-grid"><label>共通sourceId<input id="prepCommonSource" placeholder="source-1"></label><label>共通の参照箇所<input id="prepCommonReference" placeholder="URL#表・資料のページ番号等"></label><label>確認時刻<input id="prepCommonChecked"></label><label>公表時刻<input id="prepCommonPublished"></label><label>取得時刻<input id="prepCommonAcquired"></label><label>利用可能時刻<input id="prepCommonAvailable"></label></div><label><input id="prepCommonAttest" type="checkbox">記載済み項目がレース前の確認事実で、同じ出所・時刻を適用できると確認した</label><button id="prepApplyCommon">出走表・記載済み項目・ラインへ共通出典を適用</button><p>事実/推定と各時刻は、下の項目ごとにも修正できます。推定は事実の採点根拠に使いません。</p><div id="prepCardTiming"></div><div id="prepRunners"></div>
+ <div id="prepLineSection" hidden><h4>競輪ライン（個人能力と分離）</h4><label>先頭→番手の構成（例 1-2-3 / 4-5 / 6-7）<input id="prepLineGroups"></label><label>状態<select id="prepLineStatus"><option value="UNCONFIRMED">不明</option><option value="PREDICTED">予想</option><option value="CONFIRMED_BY_USER">確認済みとの申告</option></select></label><label>展開・ライン所見<textarea id="prepLineNote" rows="2"></textarea></label><div id="prepLineTiming"></div></div></div>
+ <div class="card"><h3>4. 不足を点検して依頼を用意</h3><div class="prep-actions"><button id="prepCheck">品質・不足を確認</button><button id="prepRequest">許可資料だけでユニ依頼を作成</button><button id="prepLocal">USER_ONLYでローカル未採点V2を用意</button></div><div id="prepQuality" role="status"></div><label>依頼一式（採点ルール・V2テンプレート・許可資料のみ）<textarea id="prepRequestText" rows="10" readonly></textarea></label><div class="prep-actions"><button id="prepCopyRequest" disabled>依頼一式をコピー</button><button id="prepSaveRequest" disabled>依頼をTXT保存</button><button id="prepSave">準備JSONをローカル保存</button><label>準備JSONを復元<input id="prepRestore" type="file" accept=".json"></label></div><p>コピーは手動です。RaceLabは外部AIへ送信しません。資料を閲覧できたかはユニが実際の状況を回答します。</p></div>
+ <div class="card"><h3>5. 分析文章とV2 JSONを受け取る</h3><label>文章＋1つのjsonコードフェンス、またはJSON<textarea id="prepResponse" rows="10" placeholder="ユニの出力をここへ貼付"></textarea></label><label>JSON / CSV / TXT保存データを読込（UTF-8）<input id="prepResponseFile" type="file" accept=".json,.csv,.txt"></label><div class="prep-actions"><button id="prepValidateResponse">準備資料と照合・プレビュー</button><button id="prepSimulate">架空資料だけの模擬応答を作る</button><button id="prepRepair">原文を含まない修正依頼を作成</button></div><label>修正依頼文<textarea id="prepRepairText" readonly rows="3"></textarea></label><div id="prepResponsePreview"></div><button id="prepTransfer" disabled>検証済みV2を比較画面へ渡す（確定は次画面）</button><p>次の画面で確定追加・項目詳細・手修正・履歴・JSON/CSV保存を利用できます。同一レースは上書き追加しません。</p><label>実用レポート（順位・根拠・ライン・AI/USER差）<textarea id="prepReport" readonly rows="8"></textarea></label><button id="prepSaveArchive" disabled>文章＋再読込用JSONをTXT保存</button><p>復元済みのV2も、分析画面での編集後はJSON保存→ここへ読込で最新の差分を確認できます。</p></div>
+</section>
+
+<section id="studyView" hidden aria-labelledby="studyHeading" class="study">
+ <div class="panel"><h2 id="studyHeading" tabindex="-1">数値成績・軽量依頼・複数評価の比較</h2><p>近走の具体的な記録から根拠を確認します。点数は暫定相対評価で勝率ではありません。形式PASSと採点の妥当性は別です。</p><p class="warn">サンプルは独自SYNTHETIC / TEST_FIXTURE。模擬応答は手作成の試験用採点で、実AIによる分析ではありません。</p><div class="study-actions"><button id="studyHorse18">数値入り架空18頭</button><button id="studyKeirin7">数値入り架空7車</button><button id="studyKeirin9">数値入り架空9車</button></div><p id="studyStatus" role="status" aria-live="polite"></p><p id="studyError" role="alert"></p></div>
+ <div class="panel"><h3>1. 資料と用途を確認</h3><div class="study-grid"><label>データ区分<select id="studyKind"><option value="REAL">REAL・実在資料の手入力</option><option value="TEST_FIXTURE">TEST_FIXTURE・独自架空資料</option></select></label><label>同期対象外の保存先（申告）<input id="studyStorage" placeholder="C:\RaceLabLocal\manual"></label></div><label class="study-check"><input id="studyUnsynced" type="checkbox">実際の保存先がDrive/OneDrive等の同期対象外と確認した</label><p>既存の「①レース情報・ユニ依頼」で作った準備JSONも読めます。USER_ONLYのローカル操作は既存画面に残ります。この画面のAI依頼/比較には外部AI用途の確認が必要です。</p><details><summary>準備資料JSONの貼付・編集（元ファイルは変更しません）</summary><label>準備スナップショット／準備V1／独自数値試験資料<textarea id="studyPreparation" rows="8" spellcheck="false"></textarea></label></details><label>準備JSONファイル<input id="studyPreparationFile" type="file" accept=".json"></label><button id="studyInspect">資料・時刻・許諾を検査</button><div id="studySourceSummary"></div><details><summary>全員の具体的な根拠記録</summary><div id="studyObservations"></div></details></div>
+ <div class="panel"><h3>2. 一度のコピーでユニへ依頼</h3><div class="study-grid"><label>依頼形式<select id="studyFormat"><option value="COMPACT">簡易版・共通辞書を1回記述</option><option value="FULL">完全版・V2を展開表示</option></select></label><label>文字数の警告目安<input id="studySoftLimit" type="number" min="100" max="200000" value="16000"></label></div><div class="study-actions"><button id="studyGenerate">依頼を作成・復元一致を検査</button><button id="studyCopy" disabled>依頼一式をコピー</button><button id="studySavePrompt" disabled>依頼TXTを保存</button></div><p id="studyMeasurements"></p><ul id="studyPromptWarnings"></ul><label>採点ルール・アンカー・V2出力仕様・許可資料の一式<textarea id="studyPrompt" readonly rows="9"></textarea></label><p>共有参照は辞書IDを展開、不明はnullまたは根拠なし。内容の途中切捨ては行いません。コピーは手動で、自動送信しません。</p></div>
+ <div class="panel"><h3>3. 応答の根拠と計算を検査</h3><label>分析文章＋V2 JSON（1つのjsonフェンス）、保存JSON/CSV/TXT<textarea id="studyResponse" rows="8" spellcheck="false"></textarea></label><label>応答ファイル<input id="studyResponseFile" type="file" accept=".json,.csv,.txt"></label><div class="study-actions"><button id="studyMockA">試験用模擬応答A</button><button id="studyMockB">同じ資料の模擬応答B</button><button id="studyValidate">元資料と照合・採点を検査</button></div><div id="studyQuality"></div><details><summary>項目別の元事実 → 評価理由 → 点数</summary><div id="studyTrace"></div></details><label class="study-check"><input id="studyHumanReview" type="checkbox">元の観測値・相手/条件・点数説明・ライン分離を人が確認した（提供元や精度の認証ではない）</label><button id="studyTransfer" disabled>既存V2比較画面へ渡す（確定は次画面）</button><p>項目点・null・順位・手修正・履歴・JSON/CSV保存は既存V2画面で確認。編集後の保存ファイルもここへ再読込できます。</p></div>
+ <div class="panel"><h3>4. 同じ資料の複数評価を独立保存・比較</h3><p>通常のレース一覧へ同一レースを重複登録しません。ここには原評価を別記録として保存し、USER修正をAIのばらつきに混ぜません。</p><div class="study-grid"><label>評価ラベル<input id="studyRunLabel" placeholder="例：手動実行1回目"></label><label>モデル名（利用者申告・不明は空欄）<input id="studyModelLabel"></label><label>応答の由来<select id="studyOrigin"><option value="USER_SUPPLIED_AI">利用者が持込んだAI応答（独立未確認）</option><option value="SIMULATED">独自架空の模擬応答</option></select></label></div><button id="studyAddRun" disabled>この評価を比較用に記録</button><p id="studyRunCount">0評価</p><div class="study-grid"><label>比較元<select id="studyLeft"></select></label><label>比較先<select id="studyRight"></select></label></div><button id="studyCompare" disabled>点数・順位・根拠・null・所見の差を表示</button><div id="studyComparison"></div><label>比較結果JSON<textarea id="studyComparisonJSON" readonly rows="5"></textarea></label><div class="study-actions"><button id="studySaveBook" disabled>資料と複数評価をJSON保存</button><button id="studySaveReport" disabled>比較レポートTXT保存</button><label>同一区分の比較JSONを復元<input id="studyRestoreBook" type="file" accept=".json"></label></div><p>数値の一致・不一致は正確性/的中率の証拠ではありません。実AIの再現性は本開発ではNOT_TESTED。根拠の意味的な矛盾は人が確認してください。</p></div>
+</section>
+
+<section id="identityView" hidden class="identity" aria-labelledby="identityHeading">
+ <div class="panel"><h2 id="identityHeading" tabindex="-1">出走表取込 → 全員照合 → 能力分析 → 事後結果照合</h2><p>馬番・車番と氏名を、独立した確認用名簿と一行ずつ照合します。枠番は別の欄です。OCR・画像自動認識・Web取得・AI送信は行いません。</p><p class="warn">照合は利用者が原資料を確認した記録です。提供元・実人・取得時刻の真正性を認証しません。未確認・取消・除外・不一致は採点保留です。</p><div class="identity-actions"><button id="idFixtureSwap9">架空9車・④⑦取り違えを再現</button><button id="idFixture7">架空7車</button><button id="idFixture18">架空18頭</button></div><div class="identity-grid"><label>区分<select id="idKind"><option value="REAL">REAL・手入力</option><option value="TEST_FIXTURE">TEST_FIXTURE・独自架空</option><option value="SYNTHETIC">SYNTHETIC・旧V1名簿照合</option></select></label><label>照合者<input id="idReviewer" placeholder="自分の識別名"></label><label>非同期ローカル保存先<input id="idStorage" placeholder="C:\RaceLabLocal\manual"></label></div><label class="identity-check"><input id="idUnsynced" type="checkbox">Drive/OneDrive等の同期対象外と確認した（保存ダイアログでも同じ場所を指定）</label><p id="idStatus" role="status" aria-live="polite"></p><p id="idError" role="alert"></p></div>
+ <div class="panel"><h3>1. 独立アンカーと取込候補</h3><p>ユニの抽出候補をそのまま正解名簿へコピーせず、原画像や別途確認済み一覧を見て照合元を用意してください。画像自体のアップロード/解析はありません。</p><div class="identity-grid"><label>独立した利用者確認名簿JSON<textarea id="idReference" rows="9"></textarea></label><label>ユニの抽出候補/手動転記JSON<textarea id="idCandidate" rows="9"></textarea></label></div><div class="identity-actions"><button id="idCreate">別々の名簿を検査して照合開始</button><button id="idTemplate">空の名簿テンプレート</button><label>照合JSON/CSV/TXTを読込<input id="idIntakeFile" type="file" accept=".json,.csv,.txt"></label></div><label>訂正理由<input id="idCorrectionReason" placeholder="どの原資料を見て、何を直したか"></label><div class="identity-actions"><button id="idCorrect" disabled>候補の訂正を履歴に記録（全確認失効）</button><button id="idCorrectFixture" disabled>架空試験：正しい候補・根拠資料へ訂正</button></div><p id="idRevision"></p><div id="idRoster" class="identity-roster"></div><div id="idIssues"></div><div id="idLines"></div><details><summary>訂正・行照合の記録</summary><pre id="idHistory"></pre></details></div>
+ <div class="panel"><h3>2. 根拠資料・権利・時点 → ユニ依頼文</h3><p>既存準備V1を使います。番号/名前の訂正後は、この原資料も正しい出所で作り直してください。本人に紐づく成績を勝手に引き継ぎません。</p><label>準備JSON／準備スナップショット<textarea id="idPreparation" rows="7"></textarea></label><label>準備JSONを読込<input id="idPreparationFile" type="file" accept=".json"></label><label>分析方法<select id="idMethod"><option value="EXTERNAL_AI">EXTERNAL_AI・利用条件確認済み資料だけ</option><option value="USER_ONLY">USER_ONLY・ローカル手入力</option></select></label><div class="identity-actions"><button id="idGenerate" disabled>権利・時刻を検査して依頼を作成</button><button id="idCopy" disabled>依頼一式をコピー</button><button id="idLocal" disabled>ローカル未採点V2を表示</button></div><label>依頼文（自動送信なし）<textarea id="idRequest" rows="7" readonly></textarea></label><p id="idPromptInfo"></p><button id="idRepair">原資料を含まない修正依頼文</button><label>修正依頼文<textarea id="idRepairText" rows="3" readonly></textarea></label></div>
+ <div class="panel"><h3>3. V2取込 → 能力比較</h3><label>分析文章＋1つのV2 JSON、保存JSON/CSV/TXT<textarea id="idResponse" rows="7"></textarea></label><label>V2ファイルを読込<input id="idResponseFile" type="file" accept=".json,.csv,.txt"></label><div class="identity-actions"><button id="idMock" disabled>架空資料だけの模擬応答</button><button id="idPreview" disabled>全員照合を再検査してプレビュー</button><button id="idCommit" disabled>この版へ確定追加</button></div><div id="idAnalysisPreview"></div><p>能力点は暫定相対評価で勝率ではありません。根拠率は情報充足度、意味的な採点の正しさは人が確認してください。</p><div id="idRanking"></div><div class="identity-grid"><label>手修正する番号<select id="idEditNumber"></select></label><label>総合点（空欄は未評価）<input id="idEditScore" type="number" min="0" max="100" step="0.1"></label><label>修正理由<input id="idEditReason"></label></div><button id="idEdit" disabled>USER修正・履歴を記録</button><div class="identity-actions"><button id="idV2JSON" disabled>互換V2 JSON保存</button><button id="idV2CSV" disabled>互換V2 CSV保存</button><button id="idV2TXT" disabled>分析文＋V2 JSONをTXT保存</button></div></div>
+ <div class="panel"><h3>4. 事前内容の固定（履歴は上書きしない）</h3><p>名簿・資料・依頼文・分析・修正履歴をアプリ上で変更不可の別スナップショットにします。発走後の固定はRETROSPECTIVEと表示し、事前記録とは扱いません。端末時計・自己申告・SHAは第三者の事前時刻証明ではありません。</p><button id="idFreeze" disabled>現在版を内容固定・SHA記録</button><label>固定記録<select id="idSnapshot"></select></label><pre id="idSnapshotInfo"></pre></div>
+ <div class="panel"><h3>5. 事後結果照合（事前データとは別領域）</h3><p>結果の取得・払戻・収益計算は追加しません。結果を追加しても固定済みの名簿・依頼文・点数は変更しません。原因分類は利用者の仮説で、1件の結果から重みを自動変更しません。</p><label>結果（1行1人：着順,出走者番号,名前）<textarea id="idResultRows" rows="4" placeholder="1,7,名前&#10;2,1,名前"></textarea></label><div class="identity-grid"><label>結果のsourceId<input id="idResultSourceId"></label><label>結果の出典<input id="idResultSource"></label><label>結果の確認時刻<input id="idResultChecked" placeholder="2026-10-26T10:00:00+09:00"></label><label>検証する仮説<select id="idResultClass"><option value="CHANCE_OR_UNKNOWN">偶然・原因未確定</option><option value="IDENTITY_MISMATCH">番号・氏名の取り違え</option><option value="SCENARIO_ERROR">展開想定の誤り</option><option value="ABILITY_ERROR">能力評価の誤り</option></select></label></div><details><summary>結果用の独立した用途台帳（事前台帳へ逆流させない）</summary><label>RACELAB_LOCAL_RIGHTS_V1<textarea id="idResultRights" rows="6"></textarea></label><button id="idCopyResultRights">現在の台帳を結果用欄へ明示コピーして確認</button><p>結果のsourceIdに対応するローカル分析・保存の確認が必要。外部AI送信はしません。</p></details><label>所見<input id="idResultComment"></label><button id="idAddResult" disabled>結果を別記録へ追加・事前SHA不変を確認</button><div id="idResults"></div></div>
+ <div class="panel"><h3>保存・復元</h3><div class="identity-actions"><button id="idSaveWorkspace" disabled>全作業・履歴・固定/結果をJSON保存</button><label>全作業JSONを復元<input id="idWorkspaceFile" type="file" accept=".json"></label><button id="idSaveIntakeJSON" disabled>照合JSON保存</button><button id="idSaveIntakeCSV" disabled>照合CSV保存</button><button id="idSaveIntakeTXT" disabled>照合TXT保存</button></div><p>既存V2/39列CSVは変更していません。照合CSVは別形式です。旧画面でも照合なしの依頼/採点適用/確定はHOLDします。Windows・iPhone・Excel実機はMANUAL_REQUIRED、画像自動認識はNOT_IMPLEMENTED、実AI精度はNOT_ESTABLISHED。</p></div>
+</section>
+
+<section id="horseLab" hidden aria-label="競馬・展開分析">
+ <header class="hl-head"><div><p class="hl-overline">RACELAB / HORSE RACING</p><h1>競馬 展開シミュレーター <small style="font-size:13px;color:#b4c0d4">検証中モデル</small></h1><p class="hl-muted">出走表PDF → 馬の特徴 → ペース別の展開 → 3連単候補</p></div><button id="horseToKeirin" type="button">競輪シミュレーターへ</button></header>
+ <div class="hl-notice">未校正の仮説モデルです。表示する着順候補・出現回数は的中確率や購入推奨ではありません。PDFはこの画面内で処理し、外部送信・自動保存しません。</div>
+ <div class="hl-step"><div class="hl-number">1</div><div class="hl-content"><h2>JRA出走表を読み込む</h2><p class="hl-muted">「過去4走成績」を含む文字情報付きのJRA PDFに対応。手入力で能力点を設定する必要はありません。</p><label class="hl-picker">出走表PDFを選択<input id="horseFile" type="file" accept=".pdf,application/pdf"></label><div id="horseStatus" role="status" aria-live="polite">PDFを選択してください。</div><p id="horseError" class="hl-error" role="alert"></p></div></div>
+ <div id="horseLoaded" hidden>
+  <div class="hl-step"><div class="hl-number">2</div><div class="hl-content"><h2>能力と脚質を自動比較</h2><div id="horseRaceMeta"></div><div class="hl-scroll"><table class="hl-table"><thead><tr><th>評価順</th><th>馬番・馬名</th><th>脚質傾向</th><th>プレR</th><th>近4走着順</th><th>参考評価・根拠</th></tr></thead><tbody id="horseRankRows"></tbody></table></div><p class="hl-footnote">参考評価は掲載されたプレレーティング・近4走着順・距離実績・同場実績を、公開した仮定の重みで比較した指数です。実力や勝率の認証値ではありません。欠損は0点として扱いません。</p></div></div>
+  <div class="hl-step"><div class="hl-number">3</div><div class="hl-content"><h2>ペース別に展開を比較</h2><div class="hl-controls"><label>各展開の試行回数 <select id="horseRuns"><option value="10000">10,000回</option><option value="30000">30,000回</option><option value="50000">50,000回</option><option value="100000" selected>100,000回</option></select></label><button id="horseSimulate" class="hl-primary" type="button">展開シミュレーション開始</button></div><p id="horseProgress" class="hl-simprogress" role="status"></p><p class="hl-muted">スロー／平均／ハイペースの3条件を別々に試算し、着順パターンを比較します。乱数は資料ごとに固定して再現性を確保。穴候補を探すなら100,000回を推奨（少数回の偶然を減らすため）。</p><div id="horseHoleFocus" class="hl-hole-focus" hidden></div><div id="horseScenarios" class="hl-scenarios"></div><p class="hl-footnote">モデルではペース仮説・相対評価・乱数のばらつきを設定しています。実際のペース、枠順有利不利、当日馬場・調教、馬体重変化、最終オッズは反映しません。実レースでの予測検証は未実施です。</p></div></div>
+  <details class="hl-details"><summary>計算方法・不足情報・利用上の注意</summary><div id="horseDetails"></div></details>
+ </div>
+</section>
+
+<section id="keirinLab" hidden aria-label="競輪・展開分析">
+ <header class="hl-head"><div><p class="hl-overline">RACELAB / KEIRIN</p><h1>競輪 展開シミュレーター</h1><p class="hl-muted">出走表PDF / V11.23 → 選手比較 → 戦法別仮説 → 3連単候補</p></div><div class="hl-nav"><button id="keirinToHorse" type="button">競馬シミュレーターへ</button><button id="keirinAdvanced" type="button">旧詳細機能（必要なときのみ）</button></div></header>
+ <div class="hl-notice">数値は未校正の仮定モデルの出現率で、実戦的中確率ではありません。正式な本人照合・利用条件・事前取得ゲートを通過した結果ではありません。読み込んだ原本は外部送信・自動保存しません。</div>
+ <div class="hl-step"><div class="hl-number">1</div><div class="hl-content"><h2>競輪の出走情報を読み込む</h2><p class="hl-muted">KEIRIN.JPの文字情報付きPDF、またはKドリームスV11.23の抽出テキストに対応します。</p><label class="hl-picker">出走表PDFを選択<input id="keirinFile" type="file" accept=".pdf,application/pdf"></label><p class="hl-muted">またはブックマークレットの結果を貼付</p><textarea id="keirinPaste" rows="4" placeholder="V11.23の抽出結果をここへ貼付"></textarea><p><button id="keirinImport">貼付データを読み込む</button></p><div id="keirinStatus" class="hl-simprogress" role="status">PDFを選択するか、V11.23を貼ってください。</div><p id="keirinError" class="hl-error" role="alert"></p></div></div>
+ <div id="keirinLoaded" hidden>
+  <div class="hl-step"><div class="hl-number">2</div><div class="hl-content"><h2>選手の能力傾向と根拠を比較</h2><label>レース<select id="keirinSelect"></select></label><div id="keirinRaceMeta"></div><div class="hl-scroll"><table class="hl-table"><thead><tr><th>評価順</th><th>車番・氏名</th><th>競走得点</th><th>逃 / 捲 / 差 / マ</th><th>参考比較・根拠</th></tr></thead><tbody id="keirinRankRows"></tbody></table></div><p class="hl-footnote">掲載競走得点・勝率・3連対率・決まり手回数を根拠付きで比較。母数や期間が不明な場合は、相互比較に制限があります。持久力・近況・バンク適性は未評価です。</p></div></div>
+  <div class="hl-step"><div class="hl-number">3</div><div class="hl-content"><h2>戦法別の仮説と3連単を比較</h2><label>参考ライン（任意・未確認の入力例 1-2-3 / 4-5 / 6-7）<input id="keirinLine" placeholder="ラインが未確認なら空欄でOK"></label><div class="hl-controls"><label>各展開の試行回数<select id="keirinRuns"><option value="10000">10,000回</option><option value="30000">30,000回</option><option value="50000">50,000回</option><option value="100000" selected>100,000回</option></select></label><button id="keirinSimulate" class="hl-primary" type="button">展開シミュレーション開始</button></div><p id="keirinProgress" class="hl-simprogress" role="status"></p><div id="keirinHoleFocus" class="hl-hole-focus" hidden></div><div id="keirinScenarios" class="hl-scenarios"></div><p class="hl-disclaimer">ラインが不明なら番手・先頭効果は計上しません。実ラインを推測した結果でも正式予想でもありません。</p></div></div>
+  <details class="hl-details"><summary>仮の計算式・不足情報・利用上の注意</summary><div id="keirinDetails">比較基礎：競走得点（レース平均からの差を仮の30点幅で縮小し0.20〜0.80に制限）47%、勝率20%、3連対率13%、決まり手のレース内相対値20%。欠損は加算せず、既知項目だけで再正規化します。各展開では対象戦法に24%相当の仮補正、参考ラインの先頭または番手に仮補正を与えます。ばらつき0.38は恣意的な試験値。これらの係数は過去データで校正していません。近況・バンク適性・ラインの実際の確定情報と公表時刻・利用条件の証明は不足しています。</div></details>
+ </div>
+</section>
+
+<section id="quickView" hidden aria-labelledby="quickHeading">
+ <h2 id="quickHeading" tabindex="-1">資料からレースを選んで、まとめて試す</h2>
+ <p><strong>開発途中版：実戦精度は未確立</strong>。競馬・競輪の汎用取込。処理はこの端末内で完結します。表示する分布は<strong>未校正モデルの発生頻度</strong>で、実測的中率ではありません。</p>
+ <div id="quickStatus" role="status" aria-live="polite">資料を読み込んでください。</div><p id="quickError" role="alert"></p>
+ <section class="quick-step"><h3>1　資料取込</h3><div class="quick-grid"><label>PDF・JSON・CSV・TXTを選択<input id="quickFile" type="file" accept=".pdf,.json,.csv,.txt,application/pdf"></label><label>表示するデータの区分<select id="quickKind"><option value="REAL">実レース（REAL）</option><option value="TEST_FIXTURE">独自架空テスト（TEST_FIXTURE）</option><option value="SYNTHETIC">旧架空形式（SYNTHETIC）</option></select></label></div>
+ <label>ChatGPTが整理したデータを一度に貼付<textarea id="quickPaste" rows="4" placeholder="RaceLab互換JSON、コードフェンス付きJSON、取込CSV、または構造化テキスト"></textarea></label><div class="quick-actions"><button id="quickImport">貼付を読み込む</button><button class="developer-only" id="quickExample">架空の3レースで試す</button><button class="developer-only" id="quickPrompt">ChatGPT用の短い整形指示をコピー</button></div>
+ <details><summary>PDF対応範囲・抽出テキスト・貼付テンプレート</summary><p>標準帳票に加え、KEIRIN.JP風通常出走表の番号・氏名・競走得点・脚質を座標から対応付けます。曖昧な行はHOLD。提供された実物4ページで読込を確認済みです。全版互換の保証ではありません。画像OCR・全レイアウトは未対応。解析できない場合も元の登録は保持します。</p><textarea id="quickExtracted" rows="8" readonly aria-label="PDFから抽出した原テキスト"></textarea><button id="quickTemplate">空の互換テンプレートを表示</button><textarea id="quickTemplateText" rows="6" readonly aria-label="互換テンプレートと整形指示"></textarea></details>
+ </section>
+ <section class="quick-step"><h3>2　レースと試行回数を選択</h3><div class="quick-grid"><label>レース<select id="quickRace"><option value="">資料を読み込んでください</option></select></label><label>試行回数<select id="quickRuns"><option value="1000">1,000回</option><option value="10000" selected>10,000回</option><option value="50000">50,000回</option></select></label><label class="developer-only">計算モデル<select id="quickModel"><option value="">モデルを選択</option><option value="UNIFORM">均等の動作例（予想ではない・能力を使用しない）</option><option value="RATING">入力能力点＋ばらつき（旧試作モデル）</option><option value="KEIRIN_SCENARIO">競輪：根拠付き特徴量・展開仮定モデル</option><option value="OBSERVED_SCENARIO">観測値に基づく未校正の仮定試算</option></select></label></div>
+ <div id="bookmarkPreview" hidden><h4>ブックマークレットの資料プレビュー（独立照合・利用条件は未確認）</h4><label>プレビューするレース<select id="bookmarkRace"></select></label><div id="bookmarkTable"></div><p>発走時刻と本人照合等が未確認のため、展開試算には使用しません。候補ラインは未確認です。</p></div><div id="quickSummary"></div><button id="quickBackCandidates" hidden>結合候補の一覧に戻る</button><details><summary>別資料との照合</summary><p>別資料の出所・取得時刻・参照期間を検査し、矛盾を表示します。出所の違いだけで独立性は認証できません。</p><label>照合する資料<input id="quickMergeFile" type="file" accept=".json,.pdf,.txt,.csv"></label><button id="quickMergeCompare">選択レースを照合</button><button id="quickMergeApply">一致項目を候補に反映</button><div id="quickMergeResult"></div></details><div id="quickDataState" class="quick-data-state" aria-label="接続状態と不足情報"></div><div id="quickWarnings"></div><div id="quickLines"></div><div id="quickLineEntry" hidden><label>ライン（先頭から入力）<input id="quickLineText" placeholder="1-7 / 4-2 / 5-3-6"></label><label>ラインの状態<select id="quickLineStatus"><option value="PREDICTED">予想</option><option value="CONFIRMED_BY_USER">確認済みとの利用者申告</option><option value="UNKNOWN">不明</option></select></label><button id="quickLineApply">ラインを反映</button><p>変更後は独立資料との照合を再確認します。確認できない場合は不明のままにしてください。</p><details><summary>新ラインを別資料で確認</summary><label>独立した確認資料<input id="quickLineReferenceFile" type="file" accept=".pdf,.json,.csv,.txt"></label><label><input id="quickLineIndependent" type="checkbox">入力候補のコピーではなく、別資料を確認しました</label><label><input id="quickLineBaseReviewed" type="checkbox">V2の個人基礎点に旧ラインの展開効果が混入していないことを確認しました</label><label>確認者<input id="quickLineReviewer"></label><p id="quickLineStage">確認資料は未登録です。利用条件は別途確認が必要です。</p><button id="quickLineConfirm">別資料でラインを確認する</button></details></div><div id="quickRoster" class="quick-table"></div>
+ <details id="quickFormalDetails"><summary>候補を正式照合するための情報を入力</summary><p>発走時刻と資料の利用可能時刻を別々に確認してください。参照元・本人照合・利用条件・ライン確認は次の欄で行います。確認できない値は入力せず、観測分析だけ利用できます。</p><label>発走時刻（日本時間）<input id="quickFormalStart" type="datetime-local" step="1"></label><label>資料の利用可能時刻（日本時間・出所で確認）<input id="quickFormalAvailable" type="datetime-local" step="1"></label><label>バンク周長 m<input id="quickFormalBank" type="number" min="100" max="1000"></label><label><input id="quickFormalActive" type="checkbox">全員が出走予定で取消・除外がないことを別資料で確認した</label><details><summary>元資料の着度数と観測期間を補う（試算に必要な場合）</summary><p>同じ元資料から全員分を転記します。別資料や未確認値を混ぜないでください。1行につき「車番,1着,2着,3着,着外」。根拠がなければ空欄のまま。</p><label>掲載された観測期間<input id="quickFormalPeriod"></label><label>着度数<textarea id="quickFormalCounts" rows="4"></textarea></label><label><input id="quickFormalEvidence" type="checkbox">値と期間が元資料に掲載されていることを確認した（利用者申告）</label></details><button id="quickFormalStage">照合の準備</button><button id="quickFormalConfirm">確認済み条件を検査</button><p>準備だけでは正式化されません。独立資料・各人・利用条件を確認後に検査します。時刻と許諾の真正性は自動認証できません。</p></details>
+ <details id="quickChecks"><summary>出走表と利用条件の確認（問題がある場合だけ確認）</summary><p>同じ名簿と確認記録は再利用します。候補をコピーしただけの名簿を正解にはしません。申告は真正性や提供元の正式許諾の認証ではありません。</p>
+ <label>別資料・保存済み照合記録を追加<input id="quickReferenceFile" type="file" accept=".pdf,.json,.csv,.txt"></label><label><input id="quickIndependent" type="checkbox"> 候補から作ったコピーではなく、別の確認資料・利用者確認済み名簿です</label>
+ <label>手元の原本・別資料の参照先<input id="quickAnchorReference" placeholder="画像名・ページ・確認済み名簿など（候補とは別の参照）"></label><button id="quickStartReview">原資料を見ながら行ごとに確認する</button>
+ <h4>ローカル利用の確認</h4><label id="quickCandidateSourceLabel" hidden>確認する候補資料<select id="quickCandidateSource"></select></label><p>この確認は現在の資料に必要な出所すべてを対象とします。外部AI送信・クラウド保存は有効にしません。</p><div class="quick-grid"><label>確認者<input id="quickReviewer"></label><label>条件・許諾の根拠<input id="quickTerms" placeholder="利用条件のURL・自作資料等の根拠"></label><label>利用期限（日本時間）<input id="quickValid" type="datetime-local" step="1"></label><label>保存期限（日本時間）<input id="quickRetention" type="datetime-local" step="1"></label><label>同期対象外のローカル保存先<input id="quickStorage" value="C:\RaceLabLocal\manual"></label></div>
+ <label><input id="quickLocal" type="checkbox"> ローカル分析に利用できる条件を確認した</label><label><input id="quickStore" type="checkbox"> ローカル保存できる条件・期間を確認した</label><label><input id="quickUnsynced" type="checkbox"> 実際の保存先もDrive・OneDrive等の同期対象外である</label><button id="quickRights">確認した範囲を記録する</button>
+ <details><summary>出所・時刻・照合履歴の監査情報</summary><pre id="quickAudit"></pre></details>
+ </details>
+ <details><summary>モデル・展開条件・手動修正</summary><div class="quick-grid"><label>再現用シード<input id="quickSeed" value="RaceLab-1"></label><label>共通ばらつき（モデルの仮定）<input id="quickSigma" type="number" min="0.1" max="50" step="0.1" value="10"></label><label>能力点を修正するときの理由<input id="quickEditReason"></label></div><p>能力点は勝率ではありません。未評価を0点にしません。展開モデルは先行力・捲り力・差し脚・位置取り・持久力・近況と3〜5走の根拠/時刻が全員分必要です。</p><label>観測値の検証済み候補ファイル<input id="quickObservedFile" type="file" accept=".json"></label><p id="quickObservedState">観測値候補は未登録。出所・時点・参照期間が不足する場合は試算HOLD。</p><label>根拠付き特徴量・近走一括JSON<textarea id="quickFeaturesPaste" rows="4" placeholder="RACELAB_FEATURE_IMPORT_V1 JSON"></textarea></label><button id="quickFeaturesImport">特徴量と近走を一括取込</button><p>既存のfeatures形式を使います。全員分の根拠・出所・時点が揃わない場合は取込保留し、元データを保持します。</p><pre id="quickConditions"></pre></details>
+ </section>
+ <section class="quick-step"><h3>3　シミュレーション実行</h3><button id="quickAnalyze" class="quick-primary">取込データを分析表示</button> <button id="quickRun" class="quick-primary" disabled>条件が揃った場合の展開試算</button><p id="quickRunHelp">出走表・利用条件の確認が完了すると実行できます。</p><div id="quickResults"></div><details><summary>ラインA/Bの実行結果を比較</summary><p>同じレース・基礎能力・特徴量・試行回数・シードの展開試算を比較します。数値は未校正のモデル頻度です。</p><label>ラインA<select id="quickCompareA"></select></label><label>ラインB<select id="quickCompareB"></select></label><button id="quickCompare">2つの展開を比較</button><div id="quickComparison"></div></details><details><summary>観測試算のラインA/B比較</summary><button id="quickObservedCompare">直近の2条件を比較</button><div id="quickObservedComparison"></div></details><div class="quick-actions"><button class="developer-only" id="quickSave" disabled>全レース資料と実行記録をJSON保存</button><button id="quickSaveRace" disabled>作業を保存</button><button class="developer-only" id="quickCSV" disabled>全レース資料CSV保存</button><button class="developer-only" id="quickCSVRace" disabled>選択レースの資料CSV保存</button><button class="developer-only" id="quickResultCSV" disabled>順位分布CSV保存</button></div><label>保存した作業を復元<input id="quickRestore" type="file" accept=".json"></label></section>
+ <p><button id="quickDevelopmentToggle">開発・詳細機能を表示</button> <button id="quickPrint">印刷・PDF保存</button></p><p class="quick-limit">実レースでの校正・選手マスター連携は未検証です。PDF原本・資料を外部へ自動送信しません。Windows・iPhone・Excel実機はMANUAL_REQUIREDです。</p>
+</section>
+<button id="quickAdvanced" class="quick-switch">既存の詳細機能を開く（本人照合・V2・EV・結果・監査）</button>
+<footer>確率の校正・実戦成績は未検証です。入力不足をAIが補完する機能、購入判断の自動化はありません。既存のシミュレーターと競輪AIオーケストレーターから独立したPhase 1計算ツールです。</footer>
+<noscript><p class="error-box">計算にはブラウザのJavaScriptを有効にしてください。外部通信は不要です。</p></noscript>
+</main>
+<script id="ev-core">
+'use strict';
+// DOM、時刻取得、乱数に依存しない計算・検証・CSVコア。
+globalThis.RaceEVCore = (() => {
+  const TYPES = Object.freeze({
+    horse: Object.freeze({'単勝':{size:1,ordered:true},'複勝':{size:1,ordered:true},'馬連':{size:2,ordered:false},'馬単':{size:2,ordered:true},'ワイド':{size:2,ordered:false},'3連複':{size:3,ordered:false},'3連単':{size:3,ordered:true}}),
+    keirin: Object.freeze({'2車複':{size:2,ordered:false},'2車単':{size:2,ordered:true},'ワイド':{size:2,ordered:false},'3連複':{size:3,ordered:false},'3連単':{size:3,ordered:true}})
+  });
+  const HEADERS = Object.freeze(['形式バージョン','競技','出走数','レースID','券種','組み合わせ','日本語名・メモ','推定的中確率(0-1)','十進オッズ','購入金額(円)','期待収益率(0-1)','損益分岐確率(0-1)','期待払戻(円)','期待損益(円)','確率出所','オッズ出所','入力時刻']);
+  const MAX_BYTES = 2 * 1024 * 1024, MAX_ROWS = 5000;
+  const own = (o,k) => Object.prototype.hasOwnProperty.call(o,k);
+  function invalid(field,message){const e=new Error(message);e.field=field;throw e;}
+  function readNumber(value,field,label){
+    if(typeof value!=='string' && typeof value!=='number')invalid(field,label+'を入力してください。');
+    const text=String(value).trim();
+    if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text))invalid(field,label+'は有限の半角数値で入力してください。');
+    const n=Number(text);if(!Number.isFinite(n))invalid(field,label+'は有限の数値で入力してください。');
+    return n;
+  }
+  function calculateEV(probability,odds,stake=null){
+    if(typeof probability!=='number'||!Number.isFinite(probability)||probability<0||probability>1)invalid('probabilityPercent','的中確率は0〜100%で入力してください。');
+    if(typeof odds!=='number'||!Number.isFinite(odds)||odds<=1)invalid('odds','オッズは1より大きい有限の数値で入力してください。');
+    if(stake!==null&&(typeof stake!=='number'||!Number.isFinite(stake)||stake<=0))invalid('stake','購入金額は空欄または正の有限値にしてください。');
+    const multiple=probability*odds;
+    const result={ev:multiple-1,breakEvenProbability:1/odds,expectedPayout:stake===null?null:stake*multiple,expectedProfit:stake===null?null:stake*(multiple-1)};
+    if(Object.values(result).some(v=>v!==null&&!Number.isFinite(v)))invalid('stake','計算結果が数値範囲を超えます。オッズ・金額を確認してください。');
+    return result;
+  }
+  function normalizeCombination(sport,count,betType,raw){
+    if(!own(TYPES,sport)||!own(TYPES[sport],betType))invalid('betType','この競技では選択できない券種です。');
+    const type=TYPES[sport][betType],text=String(raw??'').trim();
+    if(!/^\d+(?:\s*-\s*\d+)*$/.test(text))invalid('combination','番号を半角ハイフンで区切ってください（例: 1-2-3）。');
+    const numbers=text.split('-').map(s=>Number(s.trim()));
+    if(numbers.length!==type.size)invalid('combination',betType+'は'+type.size+'個の番号を指定してください。');
+    if(numbers.some(n=>!Number.isInteger(n)||n<1||n>count))invalid('combination','番号は1〜'+count+'の整数にしてください。');
+    if(new Set(numbers).size!==numbers.length)invalid('combination','同じ番号を重複指定できません。');
+    if(!type.ordered)numbers.sort((a,b)=>a-b);
+    return numbers.join('-');
+  }
+  function normalizeInput(raw){
+    if(!raw||!own(TYPES,raw.sport))invalid('sport','競技の指定が不正です。');
+    const count=readNumber(raw.count,'count','出走数');
+    if(!Number.isInteger(count)||(raw.sport==='horse'?(count<2||count>18):![7,9].includes(count)))invalid('count',raw.sport==='horse'?'競馬の出走数は2〜18頭です。':'競輪の出走数は7車または9車です。');
+    const raceId=String(raw.raceId??'').trim();
+    if(!raceId||raceId.length>200)invalid('raceId','レースIDを1〜200文字で入力してください。');
+    const label=String(raw.label??'');if(label.length>2000)invalid('label','名前・メモは2,000文字以内で入力してください。');
+    const combination=normalizeCombination(raw.sport,count,raw.betType,raw.combination);
+    const percent=readNumber(raw.probabilityPercent,'probabilityPercent','推定的中確率');
+    if(percent<0||percent>100)invalid('probabilityPercent','推定的中確率は0〜100%にしてください。');
+    const probability=percent/100,odds=readNumber(raw.odds,'odds','オッズ');
+    const stake=raw.stake===null||raw.stake===undefined||String(raw.stake).trim()===''?null:readNumber(raw.stake,'stake','購入金額');
+    calculateEV(probability,odds,stake);
+    return {sport:raw.sport,count,raceId,betType:raw.betType,combination,label,probability,odds,stake,probabilitySource:'MANUAL_ASSUMPTION',oddsSource:'MANUAL_INPUT'};
+  }
+  function validateRecord(record){
+    // CSVの0〜1値を検証した後、共通入力検証で買い目等を検証する。
+    calculateEV(record.probability,record.odds,record.stake);
+    const normalized=normalizeInput({...record,probabilityPercent:record.probability*100});
+    if(record.probabilitySource!=='MANUAL_ASSUMPTION'||record.oddsSource!=='MANUAL_INPUT')throw new Error('確率・オッズの出所がPhase 1の形式と一致しません。');
+    const time=typeof record.inputTime==='string'?record.inputTime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/):null;
+    if(!time||!Number.isFinite(Date.parse(record.inputTime)))throw new Error('入力時刻は有効なISO 8601形式が必要です。');
+    const [year,month,day,hour,minute,second]=time.slice(1).map(Number),leap=year%4===0&&(year%100!==0||year%400===0),days=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
+    if(month<1||month>12||day<1||day>days[month-1]||hour>23||minute>59||second>59)throw new Error('入力時刻に存在しない日付または時刻があります。');
+    // 百分率への往復で最下位桁を変えない。
+    return {...normalized,probability:record.probability,inputTime:record.inputTime};
+  }
+  function sortRecords(records,order){
+    const rows=records.slice();
+    if(order==='evDesc'||order==='evAsc')rows.sort((a,b)=>{const d=calculateEV(a.probability,a.odds,a.stake).ev-calculateEV(b.probability,b.odds,b.stake).ev;return order==='evDesc'?-d:d;});
+    return rows;
+  }
+  function serializeCSV(rows){return '\ufeff'+rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n')+'\r\n';}
+  function parseCSV(input){
+    if(typeof input!=='string'||input.length>MAX_BYTES)throw new Error('CSVが空か、サイズ上限を超えています。');
+    let text=input.replace(/^\ufeff/,''),rows=[],row=[],cell='',quoted=false,closed=false;
+    const pushCell=()=>{row.push(cell);cell='';closed=false;if(row.length>HEADERS.length)throw new Error('CSVの列数が多すぎます。');};
+    const pushRow=()=>{pushCell();if(row.some(c=>c!==''))rows.push(row);row=[];if(rows.length>MAX_ROWS+1)throw new Error('CSVは5,000行までです。');};
+    for(let i=0;i<text.length;i++){
+      const ch=text[i];
+      if(quoted){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{quoted=false;closed=true;}}else cell+=ch;continue;}
+      if(ch==='"'){if(cell!==''||closed)throw new Error('CSVの引用符が不正です。');quoted=true;}
+      else if(ch===',')pushCell();
+      else if(ch==='\r'||ch==='\n'){if(ch==='\r'&&text[i+1]==='\n')i++;pushRow();}
+      else{if(closed)throw new Error('CSVの閉じ引用符の後に不正な文字があります。');cell+=ch;}
+    }
+    if(quoted)throw new Error('CSVの引用符が閉じていません。');
+    if(cell!==''||closed||row.length)pushRow();
+    return rows;
+  }
+  const dangerousText = s => /^[=+\-@\t\r\n]/.test(s)||/^\s+[=+\-@]/.test(s);
+  const encodeText = value => {const s=String(value);return dangerousText(s)||s.startsWith("'")?"'"+s:s;};
+  const decodeText = value => value.startsWith("'")&&(value[1]==="'"||dangerousText(value.slice(1)))?value.slice(1):value;
+  function toCSV(records){
+    if(records.length>MAX_ROWS)throw new Error('CSV出力は5,000行までです。');
+    const rows=records.map(r=>{
+      r=validateRecord(r);const c=calculateEV(r.probability,r.odds,r.stake);
+      return [1,r.sport==='horse'?'競馬':'競輪',r.count,encodeText(r.raceId),r.betType,r.combination,encodeText(r.label),r.probability,r.odds,r.stake??'',c.ev,c.breakEvenProbability,c.expectedPayout??'',c.expectedProfit??'',r.probabilitySource,r.oddsSource,r.inputTime];
+    });
+    return serializeCSV([HEADERS,...rows]);
+  }
+  function fromCSV(input){
+    const rows=parseCSV(input);
+    if(!rows.length||rows[0].length!==HEADERS.length||rows[0].some((x,i)=>x!==HEADERS[i]))throw new Error('CSV v1のヘッダ・列順が一致しません。CSV出力の形式を使用してください。');
+    if(rows.length<2)throw new Error('CSVにデータ行がありません。');
+    return rows.slice(1).map((cells,i)=>{
+      try{
+        if(cells.length!==HEADERS.length)throw new Error('列数が一致しません。');
+        if(cells[0]!=='1')throw new Error('形式バージョンは1のみ対応しています。');
+        const sport=cells[1]==='競馬'?'horse':cells[1]==='競輪'?'keirin':null;
+        const r=validateRecord({sport,count:cells[2],raceId:decodeText(cells[3]),betType:cells[4],combination:cells[5],label:decodeText(cells[6]),probability:readNumber(cells[7],'probabilityPercent','CSV確率（0〜1）'),odds:readNumber(cells[8],'odds','オッズ'),stake:cells[9]===''?null:readNumber(cells[9],'stake','購入金額'),probabilitySource:cells[14],oddsSource:cells[15],inputTime:cells[16]});
+        const c=calculateEV(r.probability,r.odds,r.stake),expected=[c.ev,c.breakEvenProbability,c.expectedPayout,c.expectedProfit];
+        for(let k=0;k<4;k++){
+          const raw=cells[10+k],wanted=expected[k];if(raw==='')continue;
+          if(wanted===null)throw new Error('購入金額が空欄なのに金額結果があります。');
+          const actual=readNumber(raw,'','計算結果');
+          if(Math.abs(actual-wanted)>1e-10+1e-12*Math.max(Math.abs(actual),Math.abs(wanted)))throw new Error(HEADERS[10+k]+'が入力値からの再計算結果と一致しません。');
+        }
+        return r;
+      }catch(e){throw new Error('CSVデータ行'+(i+1)+'：'+e.message);}
+    });
+  }
+  return Object.freeze({TYPES,HEADERS,MAX_BYTES,MAX_ROWS,calculateEV,normalizeInput,normalizeCombination,sortRecords,serializeCSV,parseCSV,toCSV,fromCSV,validateRecord});
+})();
+</script>
+<script id="history-core">
+'use strict';
+// 履歴コア: 入力→検証→判定→集計。DOM、乱数、現在時刻、外部通信に依存しない。
+globalThis.RaceHistoryCore = (() => {
+  const EV=globalThis.RaceEVCore,MAX_BYTES=2*1024*1024,MAX_ROWS=5000;
+  const COLUMNS=[
+    ['schema','形式バージョン'],['recordId','レコードID'],['dataKind','データ区分'],['sport','競技'],['raceDate','開催日'],['venue','開催場所'],['raceNo','レース番号'],['raceId','レースID'],['count','出走数'],['entrants','出走番号'],['betType','券種'],['combination','組み合わせ'],['preOdds','購入前オッズ'],['oddsAt','購入前オッズ取得時刻'],['finalOdds','確定オッズ'],['purchaseAt','購入時刻'],['probability','事前確率(0-1)'],['predictionAt','予測時刻'],['probabilitySource','確率出所'],['stake','購入金額(円)'],['startAt','レース開始時刻'],['resultStatus','結果状態'],['finish','確定着順'],['payout100','100円当たり払戻金(円)'],['resultAt','結果判明時刻'],['raceSource','レースデータ取得元'],['oddsSource','オッズ取得元'],['resultSource','結果取得元'],['declaredHit','照合用的中判定'],['memo','日本語メモ'],['outcome','算出的中判定'],['financialStatus','実績評価状態'],['realizedPayout','実現払戻(円)'],['realizedProfit','実現損益(円)'],['realizedReturn','実現回収率(0-1)'],['forecastEV','予測EV(0-1)'],['forecastPayout','予測期待払戻(円)'],['forecastProfit','予測期待損益(円)'],['comparisonGap','実現損益と予測期待損益の差(円)']
+  ];
+  const KEYS=COLUMNS.map(x=>x[0]),HEADERS=COLUMNS.map(x=>x[1]);
+  const NUMBER_KEYS=new Set(['raceNo','count','preOdds','finalOdds','probability','stake','payout100']);
+  const TIME_KEYS=['oddsAt','purchaseAt','predictionAt','startAt','resultAt'];
+  const SHARED=['dataKind','raceDate','venue','raceNo','count','entrants','startAt','resultStatus','finish','resultAt','raceSource','resultSource'];
+  const own=(obj,key)=>Object.prototype.hasOwnProperty.call(obj,key);
+  const text=v=>v===null||v===undefined?'':String(v);
+  function checkCSVSize(s){
+    if(typeof s!=='string'||s.length>MAX_BYTES)throw Error('CSVは2MiB以下にしてください。');
+    let bytes=0;for(const character of s){const n=character.codePointAt(0);if(n>=0xd800&&n<=0xdfff)throw Error('CSVに不正なUnicode文字があります。');bytes+=n<0x80?1:n<0x800?2:n<0x10000?3:4;if(bytes>MAX_BYTES)throw Error('CSVはUTF-8で2MiB以下にしてください。');}return s;
+  }
+  const finite=(n,label)=>{if(!Number.isFinite(n))throw Error(label+'が数値範囲を超えています。');return n;};
+  function number(v,label,min,max,integer=false){
+    if(v===null||v===undefined||String(v).trim()==='')return null;
+    if(!['number','string'].includes(typeof v)||!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(String(v).trim()))throw Error(label+'は有限の半角数値にしてください。');
+    const n=Number(v);if(!Number.isFinite(n)||n<min||n>max||(integer&&!Number.isInteger(n)))throw Error(label+'の範囲・形式が不正です。');return n;
+  }
+  function validDate(s){
+    const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s);if(!m)return false;
+    const [y,mo,d]=m.slice(1).map(Number),days=[31,(y%4===0&&(y%100!==0||y%400===0))?29:28,31,30,31,30,31,31,30,31,30,31];
+    return y>=1&&mo>=1&&mo<=12&&d>=1&&d<=days[mo-1];
+  }
+  function timestamp(s,label){
+    if(!s)return '';
+    const m=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(s);
+    if(!m||!validDate(m[1])||Number(m[2])>23||Number(m[3])>59||Number(m[4])>59||!Number.isFinite(Date.parse(s)))throw Error(label+'は有効なタイムゾーン付きISO 8601時刻にしてください。');return s;
+  }
+  function numbers(s,limit,label,sort=false){
+    if(!s)return '';
+    if(!/^\d+(?:\s*-\s*\d+)*$/.test(s))throw Error(label+'は半角ハイフン区切りの番号にしてください。');
+    const a=s.split('-').map(n=>Number(n.trim()));
+    if(a.some(n=>!Number.isInteger(n)||n<1||n>limit)||new Set(a).size!==a.length)throw Error(label+'の番号範囲または重複が不正です。');
+    return (sort?a.sort((a,b)=>a-b):a).join('-');
+  }
+  function normalizeRow(raw){
+    if(!raw||typeof raw!=='object')throw Error('記録の形式が不正です。');
+    const r={};for(const key of KEYS.slice(1,30))r[key]=text(raw[key]);
+    for(const key of ['recordId','raceId','sport','dataKind','raceDate','venue','betType','combination','entrants','finish','resultStatus','declaredHit','probabilitySource','raceSource','oddsSource','resultSource',...TIME_KEYS])r[key]=r[key].trim();
+    for(const key of ['recordId','raceId'])if(!r[key]||r[key].length>200)throw Error(key+'は1〜200文字で必要です。');
+    if(!['REAL','SYNTHETIC'].includes(r.dataKind))throw Error('データ区分はREALまたはSYNTHETICを明示してください。');
+    if(!own(EV.TYPES,r.sport))throw Error('競技は競馬または競輪です。');
+    for(const key of ['venue','raceSource','oddsSource','resultSource'])if(r[key].length>1000)throw Error(key+'は1,000文字までです。');
+    if(r.memo.length>4000)throw Error('メモは4,000文字までです。');
+    if(r.raceDate&&!validDate(r.raceDate))throw Error('開催日は有効なYYYY-MM-DDにしてください。');
+    r.raceNo=number(raw.raceNo,'レース番号',1,99,true);
+    r.count=number(raw.count,'出走数',2,r.sport==='horse'?18:9,true);
+    if(r.sport==='keirin'&&r.count!==null&&![7,9].includes(r.count))throw Error('競輪の出走数は7車または9車です。');
+    const limit=r.count??(r.sport==='horse'?18:9);
+    r.entrants=numbers(r.entrants,limit,'出走番号',true);r.finish=numbers(r.finish,limit,'着順');
+    if(r.count!==null&&r.entrants&&r.entrants.split('-').length!==r.count)throw Error('出走数と出走番号の件数が一致しません。');
+    r.combination=EV.normalizeCombination(r.sport,limit,r.betType,r.combination);
+    if(r.entrants){const set=new Set(r.entrants.split('-'));if([...r.finish.split('-').filter(Boolean),...r.combination.split('-')].some(n=>!set.has(n)))throw Error('着順・買い目に出走番号に存在しない番号があります。');}
+    r.preOdds=number(raw.preOdds,'購入前オッズ',1,Number.MAX_VALUE);r.finalOdds=number(raw.finalOdds,'確定オッズ',1,Number.MAX_VALUE);
+    r.probability=number(raw.probability,'事前確率(0-1)',0,1);r.stake=number(raw.stake,'購入金額',Number.MIN_VALUE,Number.MAX_VALUE);r.payout100=number(raw.payout100,'100円当たり払戻金',0,Number.MAX_VALUE);
+    if(!['','UNKNOWN','PROVISIONAL','FINAL','REFUND','CANCELLED','DEAD_HEAT'].includes(r.resultStatus))throw Error('結果状態が不正です。');
+    if(!['','HIT','MISS'].includes(r.declaredHit))throw Error('照合用的中判定はHIT/MISS/空欄です。');
+    if(!['','MANUAL_ASSUMPTION','EXTERNAL_UNVERIFIED'].includes(r.probabilitySource))throw Error('確率出所はMANUAL_ASSUMPTION/EXTERNAL_UNVERIFIED/空欄です。');
+    for(const key of TIME_KEYS)r[key]=timestamp(r[key],HEADERS[KEYS.indexOf(key)]);
+    if(r.startAt&&r.raceDate&&new Date(Date.parse(r.startAt)+9*60*60*1000).toISOString().slice(0,10)!==r.raceDate)throw Error('開催日とレース開始時刻の日本時間の日付が一致しません。');
+    if(r.startAt&&r.resultAt&&Date.parse(r.resultAt)<Date.parse(r.startAt))throw Error('結果判明時刻が開始時刻より前です。');
+    const o=outcomeFor(r);
+    if(o.outcome!=='UNEVALUATED'&&r.declaredHit&&o.outcome!==r.declaredHit)throw Error('確定着順と照合用的中判定が一致しません。');
+    if(o.outcome==='MISS'&&r.payout100!==null&&r.payout100>0)throw Error('不的中の買い目に正の払戻金があります。');
+    return r;
+  }
+  function outcomeFor(r){
+    const reasons=[];
+    const statusLabel={UNKNOWN:'不明',PROVISIONAL:'未確定',REFUND:'返還',CANCELLED:'取消',DEAD_HEAT:'同着'};
+    if(r.resultStatus!=='FINAL')reasons.push('結果状態: '+(statusLabel[r.resultStatus]||'欠損')+'のため未評価');
+    for(const [k,label] of [['count','出走数'],['entrants','出走番号'],['finish','確定着順'],['resultSource','結果取得元']])if(r[k]===null||r[k]==='')reasons.push(label+'欠損');
+    if(reasons.length)return {outcome:'UNEVALUATED',reasons};
+    const combo=r.combination.split('-').map(Number),finish=r.finish.split('-').map(Number);
+    let need=EV.TYPES[r.sport][r.betType].size;
+    if(r.betType==='複勝'){if(r.count<5)return {outcome:'UNEVALUATED',reasons:['複勝4頭以下の発売条件は未対応']};need=r.count<8?2:3;}
+    if(r.betType==='ワイド'){if(r.count<4)return {outcome:'UNEVALUATED',reasons:['ワイド3頭以下の発売条件は未対応']};need=3;}
+    if(finish.length<need)return {outcome:'UNEVALUATED',reasons:['的中判定に必要な着順が不足']};
+    const top=finish.slice(0,need);let hit;
+    if(['複勝','ワイド'].includes(r.betType))hit=combo.every(n=>top.includes(n));
+    else if(EV.TYPES[r.sport][r.betType].ordered)hit=combo.every((n,i)=>top[i]===n);
+    else hit=combo.every(n=>top.includes(n));
+    return {outcome:hit?'HIT':'MISS',reasons:[]};
+  }
+  function evaluate(raw){
+    const r=normalizeRow(raw),o=outcomeFor(r),warnings=[...o.reasons],forecastReasons=[];
+    for(const [key,label] of [['raceDate','開催日'],['venue','開催場所'],['raceNo','レース番号'],['raceSource','レースデータ取得元'],['finalOdds','確定オッズ'],['resultAt','結果判明時刻']])if(r[key]===null||r[key]==='')warnings.push(label+'欠損');
+    if(!r.raceDate||!r.venue||r.raceNo===null)warnings.push('自然キー欠損のため重複レース検出が限定的');
+    if(o.outcome==='UNEVALUATED'&&r.declaredHit)warnings.push('入力された的中判定の照合は未実施');
+    let realizedPayout=null,realizedProfit=null,realizedReturn=null;
+    if(r.stake===null)warnings.push('購入金額欠損');
+    if(o.outcome==='HIT'&&(r.payout100===null||r.payout100===0))warnings.push('的中払戻金欠損または0のため金額未評価');
+    if(r.stake!==null&&o.outcome!=='UNEVALUATED'){
+      if(o.outcome==='MISS')realizedPayout=0;
+      else if(r.payout100!==null&&r.payout100>0)realizedPayout=finite((r.stake/100)*r.payout100,'実現払戻');
+      if(realizedPayout!==null){realizedProfit=finite(realizedPayout-r.stake,'実現損益');realizedReturn=finite(realizedPayout/r.stake,'実現回収率');}
+    }
+    for(const [key,label] of [['probability','事前確率'],['preOdds','購入前オッズ'],['predictionAt','予測時刻'],['oddsAt','購入前オッズ取得時刻'],['purchaseAt','購入時刻'],['startAt','開始時刻'],['probabilitySource','確率出所'],['oddsSource','オッズ取得元']])if(r[key]===null||r[key]==='')forecastReasons.push(label+'欠損');
+    if(r.predictionAt&&r.purchaseAt&&Date.parse(r.predictionAt)>Date.parse(r.purchaseAt))forecastReasons.push('予測時刻が購入後（事後情報混入の可能性）');
+    if(r.oddsAt&&r.purchaseAt&&Date.parse(r.oddsAt)>Date.parse(r.purchaseAt))forecastReasons.push('購入前オッズ取得時刻が購入後');
+    if(r.purchaseAt&&r.startAt&&Date.parse(r.purchaseAt)>=Date.parse(r.startAt))forecastReasons.push('購入が開始前と確認できない');
+    let forecastEV=null,forecastPayout=null,forecastProfit=null;
+    if(!forecastReasons.length){
+      if(r.preOdds>1){const e=EV.calculateEV(r.probability,r.preOdds,r.stake);forecastEV=e.ev;forecastPayout=e.expectedPayout;forecastProfit=e.expectedProfit;}
+      else{forecastEV=r.probability-1;if(r.stake!==null){forecastPayout=finite(r.stake*r.probability,'予測期待払戻');forecastProfit=finite(r.stake*forecastEV,'予測期待損益');}}
+    }
+    warnings.push(...forecastReasons.map(s=>'予測未評価: '+s));
+    const comparisonGap=realizedProfit!==null&&forecastProfit!==null?finite(realizedProfit-forecastProfit,'比較差'):null;
+    return {outcome:o.outcome,financialStatus:realizedProfit===null?'UNEVALUATED':'EVALUATED',realizedPayout,realizedProfit,realizedReturn,forecastEV,forecastPayout,forecastProfit,comparisonGap,warnings:[...new Set(warnings)]};
+  }
+  const raceKey=r=>JSON.stringify([r.sport,r.raceId]);
+  function mergeRows(existing,incoming){
+    if(!Array.isArray(existing)||!Array.isArray(incoming)||existing.length+incoming.length>MAX_ROWS)throw Error('記録は合計5,000件までです。');
+    const rows=[...existing,...incoming].map(normalizeRow),ids=new Set(),tickets=new Set(),races=new Map(),natural=new Map();
+    for(const r of rows){
+      if(ids.has(r.recordId))throw Error('重複レコードID: '+r.recordId);ids.add(r.recordId);
+      const ticket=JSON.stringify([r.sport,r.raceId,r.betType,r.combination,r.purchaseAt?Date.parse(r.purchaseAt):'']);
+      if(tickets.has(ticket))throw Error('重複買い目（同一購入時点）: '+r.raceId+' '+r.combination);tickets.add(ticket);
+      const key=raceKey(r),shared=JSON.stringify(SHARED.map(k=>['startAt','resultAt'].includes(k)&&r[k]?Date.parse(r[k]):r[k]));
+      if(races.has(key)&&races.get(key)!==shared)throw Error('同一レースIDの共有データが競合: '+r.raceId);races.set(key,shared);
+      if(r.raceDate&&r.venue&&r.raceNo!==null){const n=JSON.stringify([r.sport,r.raceDate,r.venue,r.raceNo]);if(natural.has(n)&&natural.get(n)!==r.raceId)throw Error('重複レース（開催日・場所・番号が同じでIDが異なる）: '+r.raceId);natural.set(n,r.raceId);}
+      evaluate(r); // オーバーフロー等もコミット前に検証する。
+    }
+    for(const kind of ['REAL','SYNTHETIC'])summarize(rows.filter(r=>r.dataKind===kind));
+    return rows;
+  }
+  function groupRaces(rows){const map=new Map();for(const r of rows){const key=raceKey(r);if(!map.has(key))map.set(key,{key,race:r,rows:[]});map.get(key).rows.push(r);}return [...map.values()].sort((a,b)=>b.race.raceDate.localeCompare(a.race.raceDate)||a.race.raceId.localeCompare(b.race.raceId));}
+  function filterRows(rows,filters={}){
+    if(filters.from&&!validDate(filters.from)||filters.to&&!validDate(filters.to))throw Error('日付フィルタが不正です。');
+    if(filters.from&&filters.to&&filters.from>filters.to)throw Error('開始日は終了日以前にしてください。');
+    return rows.filter(r=>(!filters.dataKind||r.dataKind===filters.dataKind)&&(!filters.sport||r.sport===filters.sport)&&(!filters.betType||r.betType===filters.betType)&&(!filters.from||r.raceDate&&r.raceDate>=filters.from)&&(!filters.to||r.raceDate&&r.raceDate<=filters.to));
+  }
+  function summarize(rows){
+    if(new Set(rows.map(r=>r.dataKind)).size>1)throw Error('実データと架空データを合算できません。');
+    const s={total:rows.length,evaluated:0,unresolved:0,investment:0,payout:0,profit:0,returnRate:null,unresolvedInvestment:0,comparisonCount:0,comparisonInvestment:0,comparisonForecast:0,comparisonActual:0,comparisonGap:null};
+    for(const r of rows){const e=evaluate(r);if(e.financialStatus==='EVALUATED'){s.evaluated++;s.investment+=r.stake;s.payout+=e.realizedPayout;s.profit+=e.realizedProfit;}else{s.unresolved++;if(r.stake!==null)s.unresolvedInvestment+=r.stake;}
+      if(e.comparisonGap!==null){s.comparisonCount++;s.comparisonInvestment+=r.stake;s.comparisonForecast+=e.forecastProfit;s.comparisonActual+=e.realizedProfit;}}
+    if(s.investment>0)s.returnRate=s.payout/s.investment;if(s.comparisonCount)s.comparisonGap=s.comparisonActual-s.comparisonForecast;
+    for(const [key,value] of Object.entries(s))if(value!==null)finite(value,key);return s;
+  }
+  function parseCSV(input){
+    checkCSVSize(input);
+    const text=input.replace(/^\ufeff/,'');const rows=[];let row=[],cell='',quoted=false,closed=false;
+    const pushCell=()=>{row.push(cell);cell='';closed=false;if(row.length>KEYS.length)throw Error('CSV列数が多すぎます。');};
+    const pushRow=()=>{pushCell();if(row.some(x=>x!==''))rows.push(row);row=[];if(rows.length>MAX_ROWS+1)throw Error('CSVは5,000行までです。');};
+    for(let i=0;i<text.length;i++){const ch=text[i];if(quoted){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{quoted=false;closed=true;}}else cell+=ch;continue;}
+      if(ch==='"'){if(cell||closed)throw Error('CSV引用符が不正です。');quoted=true;}else if(ch===',')pushCell();else if(ch==='\r'||ch==='\n'){if(ch==='\r'&&text[i+1]==='\n')i++;pushRow();}else{if(closed)throw Error('CSV閉じ引用符の後が不正です。');cell+=ch;}}
+    if(quoted)throw Error('CSV引用符が閉じていません。');if(cell||closed||row.length)pushRow();return rows;
+  }
+  const serializeCSV=rows=>'\ufeff'+rows.map(row=>row.map(v=>'"'+text(v).replaceAll('"','""')+'"').join(',')).join('\r\n')+'\r\n';
+  const dangerous=s=>/^[=+\-@\t\r\n]/.test(s)||/^\s+[=+\-@]/.test(s);
+  const encode=v=>{const s=text(v);return dangerous(s)||s.startsWith("'")?"'"+s:s;};
+  const decode=s=>s.startsWith("'")&&(s[1]==="'"||dangerous(s.slice(1)))?s.slice(1):s;
+  function toCSV(input){
+    const rows=mergeRows([],input).map(r=>{const e=evaluate(r);return KEYS.map((k,i)=>{if(k==='schema')return 2;if(k==='sport')return r.sport==='horse'?'競馬':'競輪';const value=i>=30?e[k]:r[k];return NUMBER_KEYS.has(k)||i>=32?value??'':encode(value);});});
+    return checkCSVSize(serializeCSV([HEADERS,...rows]));
+  }
+  function fromCSV(input){
+    const rows=parseCSV(input);
+    if(!rows.length||rows[0].length!==HEADERS.length||rows[0].some((s,i)=>s!==HEADERS[i]))throw Error('Phase 2 CSVの列名・列順が一致しません。テンプレートを使用してください。');
+    if(rows.length<2)throw Error('CSVにデータ行がありません。');
+    const values=rows.slice(1).map((cells,index)=>{
+      try{
+        if(cells.length!==KEYS.length)throw Error('CSV列数が一致しません。');if(cells[0]!=='2')throw Error('形式バージョンは2です。');
+        const raw={};for(let i=1;i<30;i++)raw[KEYS[i]]=NUMBER_KEYS.has(KEYS[i])?cells[i]:decode(cells[i]);raw.sport=raw.sport==='競馬'?'horse':raw.sport==='競輪'?'keirin':null;
+        const r=normalizeRow(raw),e=evaluate(r);
+        for(let i=30;i<KEYS.length;i++){if(cells[i]==='')continue;const expected=e[KEYS[i]];if(expected===null)throw Error(HEADERS[i]+'は未評価のため値を持てません。');
+          if(i<32){if(decode(cells[i])!==expected)throw Error(HEADERS[i]+'が再計算と一致しません。');}
+          else{const actual=number(cells[i],HEADERS[i],-Number.MAX_VALUE,Number.MAX_VALUE);if(Math.abs(actual-expected)>1e-10+1e-12*Math.max(Math.abs(actual),Math.abs(expected)))throw Error(HEADERS[i]+'が再計算と一致しません。');}}
+        return r;
+      }catch(e){throw Error('CSVデータ行'+(index+1)+'：'+e.message);}
+    });
+    return mergeRows([],values);
+  }
+  const importCSV=(existing,csv)=>mergeRows(existing,fromCSV(csv));
+  const templateCSV=()=>serializeCSV([HEADERS]);
+  function syntheticRows(){
+    const base={recordId:'TEST-H1-1',dataKind:'SYNTHETIC',sport:'horse',raceDate:'2026-10-01',venue:'架空競馬場',raceNo:1,raceId:'架空H01',count:8,entrants:'1-2-3-4-5-6-7-8',betType:'単勝',combination:'1',preOdds:5.2,oddsAt:'2026-10-01T11:00:00+09:00',finalOdds:4,purchaseAt:'2026-10-01T11:30:00+09:00',probability:.24,predictionAt:'2026-10-01T10:00:00+09:00',probabilitySource:'MANUAL_ASSUMPTION',stake:1000,startAt:'2026-10-01T12:00:00+09:00',resultStatus:'FINAL',finish:'1-2-3',payout100:400,resultAt:'2026-10-01T12:10:00+09:00',raceSource:'架空テスト（実在しません）',oddsSource:'架空の入力オッズ',resultSource:'架空の確定結果',declaredHit:'HIT',memo:'架空データ・実レース検証ではありません'};
+    return mergeRows([],[base,{...base,recordId:'TEST-H1-2',combination:'8',probability:'',payout100:0,declaredHit:'MISS'},
+      {...base,recordId:'TEST-K7',sport:'keirin',raceId:'架空K07',venue:'架空競輪場',count:7,entrants:'1-2-3-4-5-6-7',betType:'2車単',combination:'3-1',finish:'3-1-2',preOdds:4,probability:.3,payout100:370},
+      {...base,recordId:'TEST-REFUND',raceId:'架空H02',raceNo:2,resultStatus:'REFUND',declaredHit:'',memo:'架空: 返還のため未評価'},
+      {...base,recordId:'TEST-MISSING',raceId:'架空H03',raceNo:3,finish:'',probability:'',payout100:'',preOdds:'',declaredHit:'',memo:'架空: 確定着順・オッズ・確率欠損'},
+      {...base,recordId:'TEST-TIE',sport:'keirin',raceId:'架空K09',venue:'架空競輪場',raceNo:2,count:9,entrants:'1-2-3-4-5-6-7-8-9',betType:'3連単',combination:'1-2-3',resultStatus:'DEAD_HEAT',finish:'',declaredHit:'',memo:'架空: 同着のため未評価'},
+      {...base,recordId:'TEST-POST',raceId:'架空H04',raceNo:4,predictionAt:'2026-10-01T12:11:00+09:00',memo:'架空: 結果判明後の確率は予測EVから除外'}]);
+  }
+  return Object.freeze({COLUMNS,KEYS,HEADERS,MAX_BYTES,MAX_ROWS,normalizeRow,evaluate,mergeRows,groupRaces,filterRows,summarize,parseCSV,serializeCSV,toCSV,fromCSV,importCSV,templateCSV,syntheticRows});
+})();
+
+</script>
+<script id="quality-core">
+'use strict';
+// 変換・品質・再現用スナップショット。外部通信/現在時刻/乱数/DOMなし。
+globalThis.RaceQualityCore=(()=>{
+  const H=globalThis.RaceHistoryCore,MAX_CSV=2*1024*1024,MAX_JSON=8*1024*1024,MAX_PROFILE=65536;
+  const INPUT=H.KEYS.slice(1,30),NUM=new Set(['raceNo','count','preOdds','finalOdds','probability','stake','payout100']);
+  const PRIOR=['recordId','dataKind','sport','raceDate','venue','raceNo','raceId','count','entrants','betType','combination','preOdds','oddsAt','purchaseAt','probability','predictionAt','probabilitySource','stake','startAt','raceSource','oddsSource'];
+  const MISSING=['raceDate','venue','raceNo','count','entrants','preOdds','oddsAt','finalOdds','purchaseAt','probability','predictionAt','probabilitySource','stake','startAt','resultStatus','finish','payout100','resultAt','raceSource','oddsSource','resultSource'];
+  const SHARED=['dataKind','raceDate','venue','raceNo','count','entrants','startAt','resultStatus','finish','resultAt','raceSource','resultSource'];
+  const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k),clone=o=>JSON.parse(JSON.stringify(o)),blank=v=>v===null||v===undefined||typeof v==='string'&&v.trim()==='';
+  function utf8(s,limit=Infinity){
+    if(typeof s!=='string')throw Error('文字列が必要です。');if(s.length>limit)throw Error('サイズ上限を超えています。');const out=[];
+    for(const ch of s){const n=ch.codePointAt(0);if(n>=0xd800&&n<=0xdfff)throw Error('不正なUnicode文字です。');if(n<128)out.push(n);else if(n<2048)out.push(192|(n>>6),128|(n&63));else if(n<65536)out.push(224|(n>>12),128|((n>>6)&63),128|(n&63));else out.push(240|(n>>18),128|((n>>12)&63),128|((n>>6)&63),128|(n&63));if(out.length>limit)throw Error('サイズ上限を超えています。');}return new Uint8Array(out);
+  }
+  function sha256(s){
+    const bytes=utf8(s),length=bytes.length,data=new Uint8Array(Math.ceil((length+9)/64)*64);data.set(bytes);data[length]=128;
+    const view=new DataView(data.buffer);view.setUint32(data.length-8,Math.floor(length/0x20000000));view.setUint32(data.length-4,(length*8)>>>0);
+    const k=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    const h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19],w=new Uint32Array(64),rot=(x,n)=>(x>>>n)|(x<<(32-n));
+    for(let offset=0;offset<data.length;offset+=64){for(let i=0;i<16;i++)w[i]=view.getUint32(offset+i*4);for(let i=16;i<64;i++){const a=w[i-15],b=w[i-2];w[i]=(w[i-16]+(rot(a,7)^rot(a,18)^(a>>>3))+w[i-7]+(rot(b,17)^rot(b,19)^(b>>>10)))>>>0;}
+      let [a,b,c,d,e,f,g,j]=h;for(let i=0;i<64;i++){const t1=(j+(rot(e,6)^rot(e,11)^rot(e,25))+((e&f)^(~e&g))+k[i]+w[i])>>>0,t2=((rot(a,2)^rot(a,13)^rot(a,22))+((a&b)^(a&c)^(b&c)))>>>0;j=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}const v=[a,b,c,d,e,f,g,j];for(let i=0;i<8;i++)h[i]=(h[i]+v[i])>>>0;
+    }return h.map(n=>n.toString(16).padStart(8,'0')).join('');
+  }
+  function canonical(v,depth=0){
+    if(depth>40)throw Error('JSONの階層が深すぎます。');if(v===null)return 'null';
+    if(typeof v==='string'){utf8(v);return JSON.stringify(v);}if(typeof v==='number'){if(!Number.isFinite(v))throw Error('有限数だけを保存できます。');return JSON.stringify(v);}if(typeof v==='boolean')return String(v);
+    if(Array.isArray(v))return '['+Array.from(v,x=>canonical(x,depth+1)).join(',')+']';
+    if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>{utf8(k);return JSON.stringify(k)+':'+canonical(v[k],depth+1);}).join(',')+'}';throw Error('JSON保存できない値です。');
+  }
+  const hash=v=>sha256(canonical(v));
+  function exact(o,keys,label){if(!o||Array.isArray(o)||typeof o!=='object'||Object.keys(o).some(k=>!keys.includes(k))||keys.some(k=>!own(o,k)))throw Error(label+'のフィールドが一致しません。');}
+  function optionalKeys(o,keys,label){if(!o||Array.isArray(o)||typeof o!=='object'||Object.keys(o).some(k=>!keys.includes(k)))throw Error(label+'に未知のフィールドがあります。');}
+  function validTime(s){
+    if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(s)||!Number.isFinite(Date.parse(s)))return false;
+    const y=Number(s.slice(0,4)),m=Number(s.slice(5,7)),d=Number(s.slice(8,10)),days=[31,y%4===0&&(y%100!==0||y%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+    return y>=1&&m>=1&&m<=12&&d>=1&&d<=days[m-1]&&Number(s.slice(11,13))<24&&Number(s.slice(14,16))<60&&Number(s.slice(17,19))<60;
+  }
+  function profileValidate(input){
+    const p=typeof input==='string'?JSON.parse(input):clone(input);utf8(canonical(p),MAX_PROFILE);exact(p,['version','name','fields','constants'],'変換定義');
+    if(p.version!==1||typeof p.name!=='string'||!p.name.trim()||p.name.length>200)throw Error('変換定義v1の名前が必要です。');optionalKeys(p.fields,INPUT,'割当先');optionalKeys(p.constants,['sport','dataKind'],'定数');
+    for(const [key,value] of Object.entries(p.constants)){if(own(p.fields,key))throw Error(key+'を列と定数の両方に指定できません。');if(!(['sport'].includes(key)?['horse','keirin']:['REAL','SYNTHETIC']).includes(value))throw Error('区分・競技定数が不正です。');}
+    const typed={percent:['probability'],ymd_slash:['raceDate'],jst_datetime:['oddsAt','purchaseAt','predictionAt','startAt','resultAt'],list_comma:['entrants','combination','finish'],decimal_odds:['preOdds','finalOdds'],payout:['payout100']};
+    for(const [key,rule] of Object.entries(p.fields)){
+      optionalKeys(rule,['column','transform','values','baseYen'],'列変換');if(typeof rule.column!=='string'||!rule.column||rule.column.length>200||typeof rule.transform!=='string')throw Error(key+'の元列・変換種別が必要です。');
+      if(rule.transform!=='identity'&&(!own(typed,rule.transform)||!typed[rule.transform].includes(key)))throw Error(key+'の変換種別が対象と一致しません。');
+      if(key==='payout100'&&(rule.transform!=='payout'||typeof rule.baseYen!=='number'||!Number.isFinite(rule.baseYen)||rule.baseYen<=0))throw Error('払戻にはpayout変換と正のbaseYenが必要です。');
+      if(key!=='payout100'&&own(rule,'baseYen'))throw Error('baseYenは払戻専用です。');
+      if(rule.values!==undefined){if(!rule.values||Array.isArray(rule.values)||typeof rule.values!=='object'||Object.keys(rule.values).length>200||Object.values(rule.values).some(v=>typeof v!=='string'||v.length>2000))throw Error('値の対応表が不正です。');}
+    }
+    const critical=['preOdds','finalOdds','payout100'].filter(k=>own(p.fields,k));for(let i=0;i<critical.length;i++)for(let j=i+1;j<critical.length;j++)if(p.fields[critical[i]].column===p.fields[critical[j]].column)throw Error('購入前/確定オッズと払戻金に同じ元列を兼用できません。');
+    return p;
+  }
+  function parseSourceCSV(csv){
+    utf8(csv,MAX_CSV);const text=csv.replace(/^\ufeff/,'');let row=[],cell='',quoted=false,closed=false;const rows=[];
+    const pushCell=()=>{row.push(cell);cell='';closed=false;if(row.length>200)throw Error('元CSVは200列までです。');};
+    const pushRow=()=>{pushCell();if(row.some(x=>x!==''))rows.push(row);row=[];if(rows.length>5001)throw Error('元CSVは5,000行までです。');};
+    for(let i=0;i<text.length;i++){const ch=text[i];if(quoted){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{quoted=false;closed=true;}}else cell+=ch;continue;}if(ch==='"'){if(cell||closed)throw Error('CSV引用符が不正です。');quoted=true;}else if(ch===',')pushCell();else if(ch==='\r'||ch==='\n'){if(ch==='\r'&&text[i+1]==='\n')i++;pushRow();}else{if(closed)throw Error('CSV閉じ引用符の後が不正です。');cell+=ch;}}
+    if(quoted)throw Error('CSV引用符が閉じていません。');if(cell||closed||row.length)pushRow();if(rows.length<2)throw Error('データ行のあるCSVが必要です。');if(rows[0].some(x=>!x.trim())||new Set(rows[0]).size!==rows[0].length)throw Error('空のヘッダ・重複ヘッダは使えません。');return rows;
+  }
+  const dangerous=s=>/^[=+\-@\t\r\n]/.test(s)||/^\s+[=+\-@]/.test(s);
+  const escapeCell=v=>{const s=String(v??'');return dangerous(s)||s.startsWith("'")?"'"+s:s;};
+  function numeric(s){if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)||!Number.isFinite(Number(s)))throw Error('有限の十進数が必要です。');return Number(s);}
+  function numericCell(v){const s=String(v??'');if(s==='')return '';try{numeric(s);return s;}catch{return escapeCell(s);}}
+  function transform(value,rule){
+    if(value.trim()==='')return '';
+    let v=value;if(rule.values){if(!own(rule.values,v))throw Error('値の対応表に存在しません: '+v);v=rule.values[v];}
+    if(rule.transform==='identity')return v;v=v.trim();
+    if(rule.transform==='percent')return numeric(v.replace(/%$/,''))/100;
+    if(rule.transform==='decimal_odds')return numeric(v);
+    if(rule.transform==='payout')return numeric(v)/rule.baseYen*100;
+    if(rule.transform==='list_comma'){if(!/^\d+(?:\s*,\s*\d+)*$/.test(v))throw Error('番号のカンマ区切りが必要です。');return v.split(',').map(x=>x.trim()).join('-');}
+    if(rule.transform==='ymd_slash'){const m=/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(v);if(!m)throw Error('YYYY/MM/DDが必要です。');return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');}
+    if(rule.transform==='jst_datetime'){const m=/^(\d{4})\/(\d{1,2})\/(\d{1,2}) (\d{2}:\d{2}:\d{2})$/.exec(v);if(!m)throw Error('YYYY/MM/DD HH:mm:ssが必要です。');return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0')+'T'+m[4]+'+09:00';}
+    throw Error('変換種別が未対応です。');
+  }
+  function convert(csv,profile){
+    const p=profileValidate(profile),table=parseSourceCSV(csv),headers=table[0],index=new Map(headers.map((h,i)=>[h,i]));
+    for(const rule of Object.values(p.fields))if(!index.has(rule.column))throw Error('指定した元列がありません: '+rule.column);
+    const rows=[],issues=[];
+    for(let i=1;i<table.length;i++){
+      const cells=table[i],raw=Object.fromEntries(INPUT.map(k=>[k,''])),errors=[];
+      if(cells.length!==headers.length)errors.push({code:'SOURCE_COLUMNS',message:'元CSVの列数が一致しません。'});
+      for(const [key,value] of Object.entries(p.constants))raw[key]=value;
+      for(const [key,rule] of Object.entries(p.fields)){const value=cells[index.get(rule.column)]??'';try{raw[key]=transform(value,rule);}catch(e){raw[key]=value;errors.push({code:'TRANSFORM',field:key,message:rule.column+' → '+key+': '+e.message});}}
+      const declaredKind=p.fields.dataKind?cells[index.get(p.fields.dataKind.column)]:'';
+      if(['REAL','SYNTHETIC'].includes(declaredKind)&&raw.dataKind!==declaredKind)throw Error('割り当てた元列のREAL/SYNTHETIC宣言を書き換えることはできません。');
+      for(const h of ['データ区分','dataKind'])if(index.has(h)&&['REAL','SYNTHETIC'].includes(cells[index.get(h)])&&raw.dataKind!==cells[index.get(h)])throw Error('元CSVのREAL/SYNTHETIC宣言と割当区分が矛盾しています。');
+      rows.push(raw);issues.push(errors);
+    }
+    const output=rows.map(r=>[2,...INPUT.map(k=>k==='sport'?r[k]==='horse'?'競馬':r[k]==='keirin'?'競輪':escapeCell(r[k]):NUM.has(k)?numericCell(r[k]):escapeCell(r[k])),...Array(9).fill('')]);
+    return {profile:p,headers,rows,issues,csv:H.serializeCSV([H.HEADERS,...output])};
+  }
+  function makeSource(csv,options){
+    utf8(csv,MAX_CSV);const sourceName=String(options.sourceName??'').trim(),fileName=String(options.fileName??'').trim(),preInputAsOf=String(options.preInputAsOf??'').trim();
+    if(!sourceName||sourceName.length>1000||!fileName||fileName.length>1000)throw Error('出所ラベルとファイル名を明示してください。');if(preInputAsOf&&!validTime(preInputAsOf))throw Error('事前入力基準時刻は有効なISO 8601にしてください。');
+    const mode=options.mode;if(!['standard','mapped'].includes(mode))throw Error('入力モードが不正です。');const profile=mode==='mapped'?profileValidate(options.profile):{version:1,name:'標準CSV v2',mode:'standard'};
+    const source={sourceName,fileName,mode,preInputAsOf,profile,rawText:csv,rawHash:sha256(csv),profileHash:hash(profile)};
+    const sourceId=hash({sourceName,fileName,mode,preInputAsOf,rawHash:source.rawHash,profileHash:source.profileHash});return {sourceId,...source};
+  }
+  function assess(row,preInputAsOf){
+    const e=H.evaluate(row),issues=e.warnings.map(message=>({code:'UNVERIFIED',message}));
+    if(!preInputAsOf)issues.push({code:'ASOF_MISSING',message:'事前入力情報の基準時刻が未申告です。'});
+    if(preInputAsOf&&row.predictionAt&&Date.parse(preInputAsOf)>Date.parse(row.predictionAt))issues.push({code:'LEAKAGE_RISK',message:'事前入力基準時刻が予測後です。'});
+    if(row.oddsAt&&row.predictionAt&&Date.parse(row.oddsAt)>Date.parse(row.predictionAt))issues.push({code:'LEAKAGE_RISK',message:'オッズ取得が予測後です。予測時点へ混入できません。'});
+    const comparisonEligible=e.comparisonGap!==null&&!!preInputAsOf&&!!row.predictionAt&&Date.parse(preInputAsOf)<=Date.parse(row.predictionAt)&&Date.parse(row.oddsAt)<=Date.parse(row.predictionAt);
+    const missingFields=MISSING.filter(k=>blank(row[k]));
+    return {status:comparisonEligible&&e.warnings.length===0?'NORMAL':'UNEVALUATED',comparisonEligible,verifiedOfficial:false,issues,missingFields,evaluation:e};
+  }
+  function inspect(csv,options,existing=[]){
+    const source=makeSource(csv,options),table=parseSourceCSV(csv);let conversion=null;
+    if(options.mode==='mapped')conversion=convert(csv,source.profile);else if(table[0].length!==39||table[0].some((h,i)=>h!==H.HEADERS[i]))throw Error('標準CSV v2の39列・列順が一致しません。');
+    const results=[];
+    for(let i=1;i<table.length;i++){
+      let row=null,mapped=conversion?conversion.rows[i-1]:null,issues=conversion?clone(conversion.issues[i-1]):[];
+      try{
+        if(options.mode==='standard')row=H.fromCSV(H.serializeCSV([H.HEADERS,table[i]]))[0];else row=H.normalizeRow(mapped);
+        if(issues.length)throw Error('元列の変換に異常があります。');const quality=assess(row,source.preInputAsOf);results.push({sourceRow:i+1,row,mapped,...quality});
+      }catch(e){if(!issues.length)issues.push({code:'ROW_INVALID',message:e.message});
+        if(!mapped&&table[i].length===39){mapped=Object.fromEntries(INPUT.map((k,j)=>[k,table[i][j+1]]));mapped.sport=mapped.sport==='競馬'?'horse':mapped.sport==='競輪'?'keirin':mapped.sport;}
+        results.push({sourceRow:i+1,row:null,mapped,status:'INVALID',comparisonEligible:false,verifiedOfficial:false,issues,missingFields:MISSING.filter(k=>blank(mapped?.[k]))});}
+    }
+    // 位置を失わずに重複/競合を診断する。最終確定の正本はH.mergeRows。
+    const ids=new Map(),tickets=new Map(),races=new Map(),natural=new Map();
+    function check(r,result){
+      const problem=(code,message)=>{if(result){result.status='INVALID';result.comparisonEligible=false;result.issues.push({code,message});}else throw Error('既存記録が不正です。'+message);};
+      const ticket=canonical([r.sport,r.raceId,r.betType,r.combination,r.purchaseAt?Date.parse(r.purchaseAt):'']),rk=canonical([r.sport,r.raceId]),shared=canonical(SHARED.map(k=>['startAt','resultAt'].includes(k)&&r[k]?Date.parse(r[k]):r[k]));
+      if(ids.has(r.recordId))problem('DUPLICATE_ID','重複レコードID: '+r.recordId);if(tickets.has(ticket))problem('DUPLICATE_TICKET','同一購入時点の重複買い目: '+r.raceId+' '+r.combination);if(races.has(rk)&&races.get(rk)!==shared)problem('RACE_CONFLICT','同一レースの共有情報が競合: '+r.raceId);
+      if(r.raceDate&&r.venue&&r.raceNo!==null){const n=canonical([r.sport,r.raceDate,r.venue,r.raceNo]);if(natural.has(n)&&natural.get(n)!==r.raceId)problem('DUPLICATE_RACE','同じ開催日/場所/番号に異なるレースID: '+r.raceId);natural.set(n,r.raceId);}
+      ids.set(r.recordId,true);tickets.set(ticket,true);races.set(rk,shared);
+    }
+    for(const row of existing)check(H.normalizeRow(row),null);for(const result of results)if(result.row)check(result.row,result);
+    if(!results.some(r=>r.status==='INVALID'))try{H.mergeRows(existing,results.map(r=>r.row));}catch(e){for(const r of results){r.status='INVALID';r.comparisonEligible=false;r.issues.push({code:'BATCH_INVALID',message:e.message});}}
+    return {source,results,canCommit:results.length>0&&!results.some(r=>r.status==='INVALID'),convertedCSV:conversion?.csv??csv};
+  }
+  function summary(results,kind){
+    if(!['REAL','SYNTHETIC'].includes(kind))throw Error('データ区分を個別に選んでください。');const selected=results.filter(r=>(r.row??r.mapped)?.dataKind===kind),m={total:selected.length,normal:0,invalid:0,unevaluated:0,horse:0,keirin:0,unknownSport:0,missingSlots:0,totalSlots:selected.length*MISSING.length,missingRate:null,comparisonEligible:0};
+    for(const r of selected){m[r.status==='NORMAL'?'normal':r.status==='INVALID'?'invalid':'unevaluated']++;const row=r.row??r.mapped;if(['horse','keirin'].includes(row?.sport))m[row.sport]++;else m.unknownSport++;m.missingSlots+=r.missingFields.length;if(r.comparisonEligible)m.comparisonEligible++;}if(m.totalSlots)m.missingRate=m.missingSlots/m.totalSlots;return m;
+  }
+  const empty=()=>({sources:[],entries:[]});
+  function inputFor(row,asOf){return {version:1,preInputAsOf:asOf,fields:Object.fromEntries(PRIOR.map(k=>[k,row[k]]))};}
+  function makeEntry(row,source,sourceRow,recordedAt){
+    if(!validTime(recordedAt))throw Error('記録時刻が不正です。');const inputSnapshot=inputFor(row,source.preInputAsOf),provenance={sourceId:source.sourceId,sourceRow,recordedAt};
+    const body={row:clone(row),provenance,inputSnapshot,inputHash:hash(inputSnapshot),rowHash:hash(row)};return {...body,entryHash:hash(body)};
+  }
+  function makeDocument(collection){const body={format:'RACELAB_SNAPSHOT_V1',hashAlgorithm:'SHA-256',sources:collection.sources,entries:collection.entries};return {...body,envelopeHash:hash(body)};}
+  function validateCollection(c){return verifyBundle(JSON.stringify(makeDocument(c)));}
+  function commit(collection,stage,recordedAt){
+    const existing=validateCollection(collection),s=stage.source;
+    const fresh=inspect(s.rawText,{mode:s.mode,sourceName:s.sourceName,fileName:s.fileName,preInputAsOf:s.preInputAsOf,profile:s.profile},existing.entries.map(e=>e.row));
+    if(!fresh.canCommit)throw Error('異常または重複のため追加0件です。');
+    const sources=existing.sources.some(v=>v.sourceId===fresh.source.sourceId)?existing.sources:[...existing.sources,fresh.source];
+    const entries=[...existing.entries,...fresh.results.map(r=>makeEntry(r.row,fresh.source,r.sourceRow,recordedAt))];
+    const output={sources,entries};utf8(JSON.stringify(makeDocument(output)),MAX_JSON);return output;
+  }
+  function verifyBundle(serialized){
+    utf8(serialized,MAX_JSON);const d=JSON.parse(serialized);exact(d,['format','hashAlgorithm','sources','entries','envelopeHash'],'スナップショット');
+    if(d.format!=='RACELAB_SNAPSHOT_V1'||d.hashAlgorithm!=='SHA-256'||!Array.isArray(d.sources)||!Array.isArray(d.entries)||d.entries.length>5000||d.sources.length>5000)throw Error('スナップショット形式が不正です。');
+    const {envelopeHash,...body}=d;if(envelopeHash!==hash(body))throw Error('スナップショット全体のハッシュが一致しません。');
+    const sources=new Map(),replays=new Map(),counts=new Map();
+    for(const s of d.sources){
+      exact(s,['sourceId','sourceName','fileName','mode','preInputAsOf','profile','rawText','rawHash','profileHash'],'取込元');if(sources.has(s.sourceId))throw Error('取込元IDが重複しています。');
+      const rebuilt=makeSource(s.rawText,{mode:s.mode,sourceName:s.sourceName,fileName:s.fileName,preInputAsOf:s.preInputAsOf,profile:s.profile});if(canonical(s)!==canonical(rebuilt))throw Error('元CSV・定義・取込元ハッシュが一致しません。');
+      const replay=inspect(s.rawText,{mode:s.mode,sourceName:s.sourceName,fileName:s.fileName,preInputAsOf:s.preInputAsOf,profile:s.profile});if(!replay.canCommit)throw Error('元CSVからの再現が異常です。');sources.set(s.sourceId,s);replays.set(s.sourceId,new Map(replay.results.map(r=>[r.sourceRow,r.row])));counts.set(s.sourceId,0);
+    }
+    for(const e of d.entries){
+      exact(e,['row','provenance','inputSnapshot','inputHash','rowHash','entryHash'],'入力記録');exact(e.row,INPUT,'記録行');exact(e.provenance,['sourceId','sourceRow','recordedAt'],'追跡情報');
+      const p=e.provenance,s=sources.get(p.sourceId);if(!s||!Number.isInteger(p.sourceRow)||p.sourceRow<2||!validTime(p.recordedAt))throw Error('元CSV位置・記録時刻が不正です。');
+      const r=H.normalizeRow(e.row);if(canonical(r)!==canonical(e.row)||e.rowHash!==hash(e.row))throw Error('記録行のハッシュが一致しません。');
+      if(canonical(e.inputSnapshot)!==canonical(inputFor(r,s.preInputAsOf))||e.inputHash!==hash(e.inputSnapshot))throw Error('事前入力の再現・ハッシュが一致しません。');
+      const {entryHash,...entryBody}=e;if(entryHash!==hash(entryBody))throw Error('入力記録のハッシュが一致しません。');
+      const replay=replays.get(p.sourceId).get(p.sourceRow);if(!replay||canonical(replay)!==canonical(r))throw Error('元CSVの再変換と記録が一致しません。');counts.set(p.sourceId,counts.get(p.sourceId)+1);
+    }
+    for(const [id,rows] of replays)if(rows.size!==counts.get(id))throw Error('バッチの記録数・元CSVの行数が一致しません。');H.mergeRows([],d.entries.map(e=>e.row));return {sources:clone(d.sources),entries:clone(d.entries)};
+  }
+  function exportBundle(collection){const serialized=JSON.stringify(makeDocument(collection),null,2);verifyBundle(serialized);return serialized;}
+  function importBundle(existing,serialized){
+    const a=validateCollection(existing),b=verifyBundle(serialized);H.mergeRows(a.entries.map(e=>e.row),b.entries.map(e=>e.row));const map=new Map(a.sources.map(s=>[s.sourceId,s]));for(const s of b.sources){if(map.has(s.sourceId)&&canonical(map.get(s.sourceId))!==canonical(s))throw Error('同じ取込元の内容が競合しています。');map.set(s.sourceId,s);}
+    const merged={sources:[...map.values()],entries:[...a.entries,...b.entries]};return validateCollection(merged);
+  }
+  function collectionResults(collection){const map=new Map(collection.sources.map(s=>[s.sourceId,s]));return collection.entries.map(e=>({row:e.row,mapped:null,sourceRow:e.provenance.sourceRow,...assess(e.row,map.get(e.provenance.sourceId).preInputAsOf),provenance:e.provenance,inputHash:e.inputHash,rowHash:e.rowHash}));}
+  const toStandardCSV=collection=>H.toCSV(validateCollection(collection).entries.map(e=>e.row));
+  const ALIASES=['元ID','区分','競技','日付','場所','競走','レース','出走数','番号','券','買い目','事前倍率','倍率時点','最終倍率','購入','確率百分率','予測','確率由来','金額','開始','結果状態','着順','払戻','確定','開催出所','倍率出所','結果出所','照合','備考'];
+  function exampleProfile(){
+    const fields={};for(let i=0;i<INPUT.length;i++)fields[INPUT[i]]={column:ALIASES[i],transform:'identity'};
+    fields.sport.values={'競馬':'horse','競輪':'keirin'};fields.raceDate.transform='ymd_slash';for(const k of ['oddsAt','purchaseAt','predictionAt','startAt','resultAt'])fields[k].transform='jst_datetime';for(const k of ['entrants','combination','finish'])fields[k].transform='list_comma';for(const k of ['preOdds','finalOdds'])fields[k].transform='decimal_odds';fields.probability.transform='percent';fields.payout100={column:'払戻',transform:'payout',baseYen:100};return {version:1,name:'架空CSV変換例（公式フォーマットではありません）',fields,constants:{}};
+  }
+  function exampleCSV(){
+    const list=H.syntheticRows(),rows=[list[0],list[2],list[1]].map(r=>({...r,predictionAt:'2026-10-01T11:10:00+09:00'}));
+    const time=s=>new Date(Date.parse(s)+9*60*60*1000).toISOString().slice(0,19).replaceAll('-','/').replace('T',' ');
+    return H.serializeCSV([ALIASES,...rows.map(r=>INPUT.map(k=>{const v=r[k];if(v===null||v==='')return '';if(k==='sport')return v==='horse'?'競馬':'競輪';if(k==='raceDate')return v.replaceAll('-','/');if(['oddsAt','purchaseAt','predictionAt','startAt','resultAt'].includes(k))return time(v);if(['entrants','combination','finish'].includes(k))return v.replaceAll('-',',');if(k==='probability')return v*100;return v;}))]);
+  }
+  return Object.freeze({INPUT,PRIOR,MISSING,MAX_CSV,MAX_JSON,MAX_PROFILE,utf8,sha256,canonical,hash,profileValidate,parseSourceCSV,convert,inspect,assess,summary,empty,commit,exportBundle,verifyBundle,importBundle,collectionResults,toStandardCSV,exampleProfile,exampleCSV});
+})();
+
+</script>
+<script id="model-core">
+'use strict';
+// SYNTHETIC専用。時刻は引数で受け取り、DOM/通信/乱数/学習は使わない。
+globalThis.RaceModelCore=(()=>{
+  const Q=globalThis.RaceQualityCore,MAX_FILE=4*1024*1024,MAX_FEATURE=256*1024;
+  const clone=v=>JSON.parse(JSON.stringify(v)),own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+  const fail=s=>{throw Error(s);};
+  function exact(o,keys,label){if(!o||typeof o!=='object'||Array.isArray(o)||Object.keys(o).some(k=>!keys.includes(k))||keys.some(k=>!own(o,k)))fail(label+'の項目が一致しません。');}
+  function str(v,label,empty=false,max=1000){if(typeof v!=='string'||v.length>max||!empty&&!v.trim())fail(label+'が不正です。');return v;}
+  function number(v,label,min=0,max=1e12){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail(label+'は範囲内の有限数が必要です。');return v;}
+  function optionalNumber(v,label,min=0,max=1e12){if(v!==null)number(v,label,min,max);}
+  function time(s,label,optional=false){if(s===null&&optional)return null;if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(s)||!Number.isFinite(Date.parse(s)))fail(label+'は秒/TZ付きの時刻が必要です。');const y=+s.slice(0,4),m=+s.slice(5,7),d=+s.slice(8,10),days=[31,y%4===0&&(y%100!==0||y%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];if(y<1||m<1||m>12||d<1||d>days[m-1]||+s.slice(11,13)>23||+s.slice(14,16)>59||+s.slice(17,19)>59)fail(label+'の日付/時刻が不正です。');return Date.parse(s);}
+  function kind(v){if(v!=='SYNTHETIC')fail('SYNTHETIC DEMO専用です。REAL/混在データは実行できません。');}
+  function sport(v){if(!['horse','keirin'].includes(v))fail('競技が不正です。');}
+  const raceKey=r=>r.sport+'::'+r.raceId;
+  const bet=s=>s==='horse'?'単勝':'2車単';
+  function list(a,max,label){if(!Array.isArray(a)||a.length>max)fail(label+'の件数上限/配列が不正です。');}
+  function participants(value,s){
+    list(value,18,'出走配列');const n=value.length;if(s==='horse'?n<2||n>18:![7,9].includes(n))fail('出走数が対象外です。');const nums=new Set(),ids=new Set();
+    for(const e of value){exact(e,['number','stableId'],'出走情報');if(!Number.isInteger(e.number)||e.number<1||e.number>(s==='horse'?18:n)||nums.has(e.number))fail('出走番号が重複/範囲外です。');nums.add(e.number);if(e.stableId!==null){str(e.stableId,'安定ID',false,200);if(ids.has(e.stableId))fail('安定IDが同じレースで重複しています。');ids.add(e.stableId);}}
+    return value;
+  }
+  function selectFeatures(input){
+    Q.utf8(Q.canonical(input),MAX_FEATURE);exact(input,['format','dataKind','sport','raceId','predictionAt','startAt','features','auditRef'],'特徴量集合');if(input.format!=='FEATURE_SET_V1')fail('特徴量形式が不正です。');kind(input.dataKind);sport(input.sport);str(input.raceId,'レースID',false,200);const at=time(input.predictionAt,'予測時刻'),start=time(input.startAt,'開始時刻');if(at>=start)fail('予測時刻は開始より前にしてください。');if(input.auditRef!==null)str(input.auditRef,'監査参照');list(input.features,32,'特徴量');
+    const allowed=new Set(['participants','field_size',...(input.sport==='horse'?['distance_m','surface_code']:['track_m','grade'])]),seen=new Set(),features=[],excluded=[];
+    for(const f of input.features){
+      exact(f,['name','value','source','publishedAt','acquiredAt','availableAt','missing'],'特徴量');str(f.name,'特徴名',false,100);str(f.source,'特徴量出所',true);if(seen.has(f.name))fail('特徴量名が重複しています。');seen.add(f.name);if(typeof f.missing!=='boolean'||f.missing!==(f.value===null))fail('特徴量の欠損状態と値が矛盾しています。');
+      const pub=time(f.publishedAt,'公表時刻',true),acq=time(f.acquiredAt,'取得時刻',true),avail=time(f.availableAt,'利用可能時刻',true);
+      let reason=!allowed.has(f.name)?'FORBIDDEN_FEATURE':f.missing?'MISSING_VALUE':!f.source.trim()?'SOURCE_UNKNOWN':pub===null||acq===null||avail===null?'TIME_MISSING':avail<pub||avail<acq?'TIME_CONFLICT':avail>at?'FUTURE_INFORMATION':null;
+      if(reason){excluded.push({name:f.name,reason});continue;}
+      if(f.name==='participants')participants(f.value,input.sport);else if(f.name==='field_size'){number(f.value,'出走数',2,18);if(!Number.isInteger(f.value))fail('出走数は整数が必要です。');}else if(['distance_m','track_m'].includes(f.name))number(f.value,'距離',1,100000);else str(f.value,'区分特徴量',false,200);
+      features.push(clone(f));
+    }
+    const p=features.find(f=>f.name==='participants'),n=features.find(f=>f.name==='field_size');if(!p||!n)fail('必要特徴量participants/field_sizeの出所・時刻・欠損を確認してください。');if(p.value.length!==n.value)fail('出走配列とfield_sizeが一致しません。');const missingStableIds=p.value.filter(e=>e.stableId===null).length;
+    const warnings=excluded.map(e=>e.name+': '+e.reason);if(missingStableIds)warnings.push('安定ID欠損 '+missingStableIds+'件。番号で代用せず、均等DEMOのみ利用。');
+    return {snapshot:{...clone(input),features},excluded,warnings,missingStableIds};
+  }
+  function classesFor(snapshot){const nums=snapshot.features.find(f=>f.name==='participants').value.map(e=>e.number);return snapshot.sport==='horse'?nums.map(String):nums.flatMap(a=>nums.filter(b=>b!==a).map(b=>a+'-'+b));}
+  function distribution(ps,k){list(ps,306,'確率分布');if(ps.length!==k||k<2)fail('全クラスの確率が必要です。');let total=0;for(const p of ps)total+=number(p,'確率',0,1);if(Math.abs(total-1)>1e-12)fail('確率の総和が1ではありません。');}
+  const defaultModel=()=>({kind:'UNIFORM_BASELINE',version:'1',source:'SYNTHETIC_UNIFORM',trainedRaceKeys:[],trainedUntil:null});
+  function validateModel(m,at){exact(m,['kind','version','source','trainedRaceKeys','trainedUntil'],'モデル');if(!['UNIFORM_BASELINE','EXTERNAL_SYNTHETIC'].includes(m.kind))fail('対象外モデルです。');str(m.version,'モデル版',false,200);str(m.source,'モデル出所');list(m.trainedRaceKeys,500,'学習レース');if(new Set(m.trainedRaceKeys).size!==m.trainedRaceKeys.length)fail('学習レースが重複しています。');for(const k of m.trainedRaceKeys)str(k,'学習レースキー');if(m.kind==='UNIFORM_BASELINE'&&(m.trainedRaceKeys.length||m.trainedUntil!==null||m.version!=='1'))fail('均等ベースラインは未学習です。');if(m.trainedRaceKeys.length&&!m.trainedUntil)fail('学習終了時刻が必要です。');if(m.trainedUntil!==null&&time(m.trainedUntil,'学習終了')>=at)fail('学習終了が予測時刻以後です。');}
+  function makePrediction(input,recordedAt,custom=null){
+    const selected=selectFeatures(input),f=selected.snapshot,at=time(f.predictionAt,'予測'),recorded=time(recordedAt,'予測記録');if(recorded<at||recorded>=time(f.startAt,'開始'))fail('予測記録は予測以後・開始前が必要です。');
+    const classes=classesFor(f),probabilities=custom?clone(custom.probabilities):classes.map(()=>1/classes.length),model=custom?clone(custom.model):defaultModel();validateModel(model,at);distribution(probabilities,classes.length);if(model.kind==='UNIFORM_BASELINE'&&probabilities.some(p=>Math.abs(p-1/classes.length)>1e-12))fail('均等ベースラインの値が不正です。');
+    const body={format:'RACELAB_PREDICTION_V1',dataKind:f.dataKind,sport:f.sport,raceId:f.raceId,betType:bet(f.sport),predictionAt:f.predictionAt,recordedAt,startAt:f.startAt,model,featureSnapshot:f,featureHash:Q.hash(f),classes,probabilities,warnings:selected.warnings};const snapshotHash=Q.hash(body);return {...body,id:'P-'+snapshotHash.slice(0,24),snapshotHash};
+  }
+  function verifyPrediction(p){
+    exact(p,['format','dataKind','sport','raceId','betType','predictionAt','recordedAt','startAt','model','featureSnapshot','featureHash','classes','probabilities','warnings','id','snapshotHash'],'予測');kind(p.dataKind);if(p.format!=='RACELAB_PREDICTION_V1')fail('予測形式が不正です。');const {id,snapshotHash,...body}=p;if(Q.hash(body)!==snapshotHash||id!=='P-'+snapshotHash.slice(0,24))fail('予測スナップショットのハッシュが不一致です。');const selected=selectFeatures(p.featureSnapshot),f=selected.snapshot;if(selected.excluded.length||Q.hash(f)!==p.featureHash)fail('保存特徴量に利用不能項目/ハッシュ不一致があります。');
+    for(const k of ['dataKind','sport','raceId','predictionAt','startAt'])if(p[k]!==f[k])fail('予測と特徴量のメタ情報が不一致です。');if(p.betType!==bet(p.sport)||Q.canonical(classesFor(f))!==Q.canonical(p.classes))fail('クラス/券種が不一致です。');distribution(p.probabilities,p.classes.length);validateModel(p.model,time(p.predictionAt,'予測'));
+    const rec=time(p.recordedAt,'記録');if(rec<time(p.predictionAt,'予測')||rec>=time(p.startAt,'開始'))fail('予測記録時刻が不正です。');if(p.model.kind==='UNIFORM_BASELINE'&&p.probabilities.some(v=>Math.abs(v-1/p.classes.length)>1e-12))fail('均等分布と不一致です。');list(p.warnings,40,'予測警告');for(const s of p.warnings)str(s,'予測警告');return p;
+  }
+  function binaryBrier(p,y){number(p,'確率',0,1);if(y!==0&&y!==1)fail('ラベルは0/1が必要です。');return (p-y)**2;}
+  function binaryLogLoss(p,y){binaryBrier(p,y);const q=y===1?p:1-p;return q===0?Infinity:q===1?0:-Math.log(q);}
+  function categoricalScore(ps,index){distribution(ps,ps.length);if(!Number.isInteger(index)||index<0||index>=ps.length)fail('正解ラベルが範囲外です。');const q=ps[index];return {brier:ps.reduce((sum,p,i)=>sum+(p-(i===index?1:0))**2,0),logLoss:q===0?null:q===1?0:-Math.log(q),logLossInfinite:q===0};}
+  function calibration(ps,ys,count=10){list(ps,160000,'校正確率');if(!Array.isArray(ys)||ps.length!==ys.length||!Number.isInteger(count)||count<2||count>100)fail('校正配列/ビン数が不正です。');const bins=Array.from({length:count},(_,i)=>({from:i/count,to:(i+1)/count,count:0,meanProbability:null,observedRate:null})),sums=Array(count).fill(0),hits=Array(count).fill(0);
+    for(let i=0;i<ps.length;i++){binaryBrier(ps[i],ys[i]);const b=Math.min(count-1,Math.floor(ps[i]*count));bins[b].count++;sums[b]+=ps[i];hits[b]+=ys[i];}let ece=0;for(let i=0;i<count;i++)if(bins[i].count){bins[i].meanProbability=sums[i]/bins[i].count;bins[i].observedRate=hits[i]/bins[i].count;ece+=bins[i].count/ps.length*Math.abs(bins[i].meanProbability-bins[i].observedRate);}return {count:ps.length,bins,ece:ps.length?ece:null};
+  }
+  function resultLabel(p,result){if(!result||result.status!=='FINAL'||!result.finish.length)return null;const nums=p.featureSnapshot.features.find(f=>f.name==='participants').value.map(e=>e.number);if(new Set(result.finish).size!==result.finish.length||result.finish.some(n=>!nums.includes(n)))fail('着順と出走番号が一致しません。');if(p.sport==='keirin'&&result.finish.length<2)return null;return p.sport==='horse'?String(result.finish[0]):result.finish[0]+'-'+result.finish[1];}
+  function validateTemporalSplit(splits,events){
+    exact(splits,['train','validation','test'],'分離区間');list(events,500,'レース期間');const map=new Map(),assigned=new Set(),roles=['train','validation','test'];for(const e of events){if(map.has(e.key))fail('期間レースキー重複。');time(e.startAt,'区間開始');time(e.predictionAt??e.startAt,'区間予測');time(e.labelAvailableAt??null,'ラベル利用可能',true);map.set(e.key,e);}
+    const groups=roles.map(role=>{list(splits[role],500,'区間');return splits[role].map(k=>{if(!map.has(k)||assigned.has(k))fail('未知/重複レースが学習・評価区間にあります。');assigned.add(k);return map.get(k);});});if(assigned.size!==map.size)fail('全レースを区間に一意に割り当ててください。');
+    for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++)if(groups[i].length&&groups[j].length){const boundary=Math.min(...groups[j].map(e=>time(e.predictionAt??e.startAt,'後続予測'))),start=Math.min(...groups[j].map(e=>time(e.startAt,'後続開始')));if(Math.max(...groups[i].map(e=>time(e.startAt,'先行開始')))>=start)fail('学習/検証/テストの時系列が逆転/重複しています。');for(const e of groups[i])if(e.labelAvailableAt===null||e.labelAvailableAt===undefined||time(e.labelAvailableAt,'先行ラベル')>=boundary)fail('学習/検証ラベルが後続予測時点に利用できません。');}
+    return {train:groups[0].length,validation:groups[1].length,test:groups[2].length};
+  }
+  function validateDataset(d){
+    Q.utf8(Q.canonical(d),MAX_FILE);exact(d,['format','dataKind','races','predictions','results','tickets','splits'],'モデル集合');if(d.format!=='RACELAB_MODEL_DEMO_V1')fail('モデル集合形式が不正です。');kind(d.dataKind);for(const [key,max] of [['races',500],['predictions',500],['results',500],['tickets',2000]])list(d[key],max,key);
+    const races=new Map(),predictions=new Map(),byId=new Map(),results=new Map(),ids=new Set();
+    for(const r of d.races){exact(r,['sport','raceId','dataKind','startAt'],'レース');sport(r.sport);kind(r.dataKind);str(r.raceId,'レースID',false,200);time(r.startAt,'開始');const k=raceKey(r);if(races.has(k))fail('レース重複。');races.set(k,r);}
+    for(const p of d.predictions){verifyPrediction(p);const k=raceKey(p);if(!races.has(k)||predictions.has(k)||byId.has(p.id))fail('予測の参照先/重複が不正です。');if(time(p.startAt,'開始')!==time(races.get(k).startAt,'開始'))fail('予測とレースの開始時刻が不一致です。');predictions.set(k,p);byId.set(p.id,p);}
+    for(const r of d.results){exact(r,['sport','raceId','dataKind','status','finish','confirmedAt','source'],'結果');kind(r.dataKind);const k=raceKey(r);if(!races.has(k)||results.has(k))fail('結果の参照先/重複が不正です。');if(!['UNKNOWN','PROVISIONAL','FINAL','REFUND','CANCELLED','DEAD_HEAT'].includes(r.status))fail('結果状態が不正です。');list(r.finish,18,'着順');if(new Set(r.finish).size!==r.finish.length||r.finish.some(n=>!Number.isInteger(n)||n<1||n>(r.sport==='horse'?18:9)))fail('着順番号が不正です。');const at=time(r.confirmedAt,'確定',true);if(at!==null&&at<time(races.get(k).startAt,'開始'))fail('結果確定が開始前です。');str(r.source,'結果出所',true);if(predictions.has(k))resultLabel(predictions.get(k),r);results.set(k,r);}
+    for(const t of d.tickets){
+      exact(t,['id','sport','raceId','dataKind','betType','combination','predictionId','purchaseStatus','purchaseAt','stake','odds','payout100','payoutSource','feeYen','policy'],'買い目');kind(t.dataKind);str(t.id,'買い目ID',false,200);if(ids.has(t.id)||!races.has(raceKey(t)))fail('買い目の重複/レース参照が不正です。');ids.add(t.id);str(t.betType,'券種',false,200);str(t.combination,'組合せ',false,200);if(t.predictionId!==null)str(t.predictionId,'予測ID',false,200);if(!['PURCHASED','HYPOTHETICAL','NOT_PURCHASED'].includes(t.purchaseStatus))fail('購入状態が不正です。');time(t.purchaseAt,'購入',true);optionalNumber(t.stake,'購入額');optionalNumber(t.feeYen,'手数料');optionalNumber(t.payout100,'払戻');str(t.payoutSource,'払戻出所',true);if(t.policy!==null&&t.policy!=='GROSS_PAYOUT_MINUS_EXPLICIT_FEE_V1')fail('未対応の払戻/手数料方針です。');
+      if(t.odds!==null){exact(t.odds,['value','kind','source','publishedAt','acquiredAt','availableAt'],'オッズ');optionalNumber(t.odds.value,'オッズ',0,1e9);if(!['PRE','FINAL'].includes(t.odds.kind))fail('オッズ区分が不正です。');str(t.odds.source,'オッズ出所',true);for(const k of ['publishedAt','acquiredAt','availableAt'])time(t.odds[k],'オッズ'+k,true);}
+    }
+    const events=d.races.map(r=>{const k=raceKey(r),res=results.get(k);return {key:k,startAt:r.startAt,predictionAt:predictions.get(k)?.predictionAt??r.startAt,labelAvailableAt:res?.status==='FINAL'&&res.source.trim()&&res.finish.length?res.confirmedAt:null};});validateTemporalSplit(d.splits,events);
+    for(const p of d.predictions){for(const k of p.model.trainedRaceKeys){if(!d.splits.train.includes(k)||k===raceKey(p))fail('モデルの学習レースが評価に混入しています。');const e=events.find(e=>e.key===k);if(!e?.labelAvailableAt||time(p.model.trainedUntil,'学習終了')<time(e.labelAvailableAt,'学習ラベル'))fail('モデル学習終了とラベル利用時刻が矛盾しています。');}}
+    return {races,predictions,byId,results,events};
+  }
+  function ticketResult(t,m){
+    const base={id:t.id,sport:t.sport,raceId:t.raceId,betType:t.betType,combination:t.combination,purchaseStatus:t.purchaseStatus,evaluated:false,reason:null};const no=reason=>({...base,reason});
+    if(t.purchaseStatus==='NOT_PURCHASED')return no('NOT_PURCHASED');const p=m.byId.get(t.predictionId);if(!p||raceKey(p)!==raceKey(t))return no('PREDICTION_MISSING');if(t.betType!==p.betType)return no('UNSUPPORTED_BET');const index=p.classes.indexOf(t.combination);if(index<0)return no('COMBINATION_INVALID');const odds=t.odds;if(!odds||odds.value===null||odds.value<=0||odds.kind!=='PRE')return no('PRE_ODDS_MISSING');if(!odds.source.trim())return no('ODDS_SOURCE_UNKNOWN');const pub=time(odds.publishedAt,'公表',true),acq=time(odds.acquiredAt,'取得',true),avail=time(odds.availableAt,'利用',true);if(pub===null||acq===null||avail===null)return no('ODDS_TIME_MISSING');if(avail<pub||avail<acq||avail>time(p.predictionAt,'予測'))return no('ODDS_FUTURE_OR_CONFLICT');
+    const purchase=time(t.purchaseAt,'購入',true);if(purchase===null||purchase<time(p.recordedAt,'記録')||purchase>=time(p.startAt,'開始'))return no('PURCHASE_TIME_INVALID');if(t.stake===null||t.stake<=0||t.feeYen===null||t.policy!=='GROSS_PAYOUT_MINUS_EXPLICIT_FEE_V1')return no('SETTLEMENT_UNDEFINED');
+    const result=m.results.get(raceKey(t));if(!result||result.status!=='FINAL'||!result.source.trim()||!result.confirmedAt)return no('RESULT_UNEVALUATED');const label=resultLabel(p,result);if(label===null)return no('RESULT_MISSING');const hit=label===t.combination;if(t.payout100===null||!t.payoutSource.trim())return no('PAYOUT_MISSING');if(hit?t.payout100<=0:t.payout100!==0)return no('PAYOUT_CONFLICT');

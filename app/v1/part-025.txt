@@ -1,0 +1,1000 @@
+      const worker = new Worker(workerSrc, {
+        type: "module"
+      });
+      const messageHandler = new MessageHandler("main", "worker", worker);
+      const terminateEarly = () => {
+        ac.abort();
+        messageHandler.destroy();
+        worker.terminate();
+        if (this.destroyed) {
+          this.#capability.reject(new Error("Worker was destroyed"));
+        } else {
+          this.#setupFakeWorker();
+        }
+      };
+      const ac = new AbortController();
+      worker.addEventListener("error", () => {
+        if (!this.#webWorker) {
+          terminateEarly();
+        }
+      }, {
+        signal: ac.signal
+      });
+      messageHandler.on("ready", data => {
+        ac.abort();
+        if (this.destroyed || !(data instanceof Uint8Array)) {
+          terminateEarly();
+          return;
+        }
+        this.#messageHandler = messageHandler;
+        this.#port = worker;
+        this.#webWorker = worker;
+        this.#resolve();
+      });
+    } catch {
+      info("The worker has been disabled.");
+      this.#setupFakeWorker();
+    }
+  }
+  #setupFakeWorker() {
+    if (!PDFWorker.#isWorkerDisabled) {
+      warn("Setting up fake worker.");
+      PDFWorker.#isWorkerDisabled = true;
+    }
+    PDFWorker._setupFakeWorkerGlobal.then(WorkerMessageHandler => {
+      if (this.destroyed) {
+        this.#capability.reject(new Error("Worker was destroyed"));
+        return;
+      }
+      const port = new LoopbackPort();
+      this.#port = port;
+      const id = `fake${PDFWorker.#fakeWorkerId++}`;
+      const workerHandler = new MessageHandler(id + "_worker", id, port);
+      WorkerMessageHandler.setup(workerHandler, port);
+      this.#messageHandler = new MessageHandler(id, id + "_worker", port);
+      this.#resolve();
+    }).catch(reason => {
+      this.#capability.reject(new Error(`Setting up fake worker failed: "${reason.message}".`));
+    });
+  }
+  destroy() {
+    this.destroyed = true;
+    this.#webWorker?.terminate();
+    this.#webWorker = null;
+    PDFWorker.#workerPorts.delete(this.#port);
+    this.#port = null;
+    this.#messageHandler?.destroy();
+    this.#messageHandler = null;
+  }
+  static create(params) {
+    const cachedPort = this.#workerPorts.get(params?.port);
+    if (cachedPort) {
+      if (cachedPort._pendingDestroy) {
+        throw new Error("PDFWorker.create - the worker is being destroyed.\n" + "Please remember to await `PDFDocumentLoadingTask.destroy()`-calls.");
+      }
+      return cachedPort;
+    }
+    return new PDFWorker(params);
+  }
+  static get workerSrc() {
+    if (GlobalWorkerOptions.workerSrc) {
+      return GlobalWorkerOptions.workerSrc;
+    }
+    throw new Error('No "GlobalWorkerOptions.workerSrc" specified.');
+  }
+  static get #mainThreadWorkerMessageHandler() {
+    try {
+      return globalThis.pdfjsWorker?.WorkerMessageHandler || null;
+    } catch {
+      return null;
+    }
+  }
+  static get _setupFakeWorkerGlobal() {
+    const loader = async () => {
+      if (this.#mainThreadWorkerMessageHandler) {
+        return this.#mainThreadWorkerMessageHandler;
+      }
+      const worker = await import(
+      /*webpackIgnore: true*/
+      /*@vite-ignore*/
+      this.workerSrc);
+      return worker.WorkerMessageHandler;
+    };
+    return util_shadow(this, "_setupFakeWorkerGlobal", loader());
+  }
+}
+class WorkerTransport {
+  downloadInfoCapability = Promise.withResolvers();
+  #fullReader = null;
+  #methodPromises = new Map();
+  #networkStream = null;
+  #pageCache = new Map();
+  #pagePromises = new Map();
+  #pageRefCache = new Map();
+  #passwordCapability = null;
+  #printToPDF = null;
+  constructor(messageHandler, loadingTask, networkStream, params, factory, pagesMapper) {
+    this.messageHandler = messageHandler;
+    this.loadingTask = loadingTask;
+    this.#networkStream = networkStream;
+    this.commonObjs = new PDFObjects();
+    this.fontLoader = new FontLoader({
+      ownerDocument: params.ownerDocument,
+      styleElement: params.styleElement
+    });
+    this.enableHWA = params.enableHWA;
+    this.loadingParams = params.loadingParams;
+    this._params = params;
+    this.canvasFactory = factory.canvasFactory;
+    this.filterFactory = factory.filterFactory;
+    this.binaryDataFactory = factory.binaryDataFactory;
+    this.pagesMapper = pagesMapper;
+    this.destroyed = false;
+    this.destroyCapability = null;
+    this.setupMessageHandler();
+  }
+  updatePage(page) {
+    this.#pageCache.set(page._id, page);
+    this.#pagePromises.set(page._pageIndex, Promise.resolve(page));
+  }
+  #cacheSimpleMethod(name, data = null) {
+    return this.#methodPromises.getOrInsertComputed(name, () => this.messageHandler.sendWithPromise(name, data));
+  }
+  #onProgress({
+    loaded,
+    total
+  }) {
+    this.loadingTask.onProgress?.({
+      loaded,
+      total,
+      percent: total ? MathClamp(Math.round(loaded / total * 100), 0, 100) : NaN
+    });
+  }
+  get annotationStorage() {
+    return util_shadow(this, "annotationStorage", new AnnotationStorage());
+  }
+  getRenderingIntent(intent, annotationMode = AnnotationMode.ENABLE, printAnnotationStorage = null, isEditing = false, isOpList = false) {
+    let renderingIntent = RenderingIntentFlag.DISPLAY;
+    let annotationStorageSerializable = SerializableEmpty;
+    switch (intent) {
+      case "any":
+        renderingIntent = RenderingIntentFlag.ANY;
+        break;
+      case "display":
+        break;
+      case "print":
+        renderingIntent = RenderingIntentFlag.PRINT;
+        break;
+      default:
+        warn(`getRenderingIntent - invalid intent: ${intent}`);
+    }
+    const annotationStorage = renderingIntent & RenderingIntentFlag.PRINT && printAnnotationStorage instanceof PrintAnnotationStorage ? printAnnotationStorage : this.annotationStorage;
+    switch (annotationMode) {
+      case AnnotationMode.DISABLE:
+        renderingIntent += RenderingIntentFlag.ANNOTATIONS_DISABLE;
+        break;
+      case AnnotationMode.ENABLE:
+        break;
+      case AnnotationMode.ENABLE_FORMS:
+        renderingIntent += RenderingIntentFlag.ANNOTATIONS_FORMS;
+        break;
+      case AnnotationMode.ENABLE_STORAGE:
+        renderingIntent += RenderingIntentFlag.ANNOTATIONS_STORAGE;
+        annotationStorageSerializable = annotationStorage.serializable;
+        break;
+      default:
+        warn(`getRenderingIntent - invalid annotationMode: ${annotationMode}`);
+    }
+    if (isEditing) {
+      renderingIntent += RenderingIntentFlag.IS_EDITING;
+    }
+    if (isOpList) {
+      renderingIntent += RenderingIntentFlag.OPLIST;
+    }
+    const {
+      ids: modifiedIds,
+      hash: modifiedIdsHash
+    } = annotationStorage.modifiedIds;
+    const cacheKeyBuf = [renderingIntent, annotationStorageSerializable.hash, modifiedIdsHash];
+    return {
+      renderingIntent,
+      cacheKey: cacheKeyBuf.join("_"),
+      annotationStorageSerializable,
+      modifiedIds
+    };
+  }
+  destroy() {
+    if (this.destroyCapability) {
+      return this.destroyCapability.promise;
+    }
+    this.destroyed = true;
+    this.destroyCapability = Promise.withResolvers();
+    this.#passwordCapability?.reject(new Error("Worker was destroyed during onPassword callback"));
+    const waitOn = [];
+    for (const page of this.#pageCache.values()) {
+      waitOn.push(page._destroy());
+    }
+    this.#pageCache.clear();
+    this.#pagePromises.clear();
+    this.#pageRefCache.clear();
+    if (Object.hasOwn(this, "annotationStorage")) {
+      this.annotationStorage.resetModified();
+    }
+    const terminated = this.messageHandler.sendWithPromise("Terminate", null);
+    waitOn.push(terminated);
+    Promise.all(waitOn).then(() => {
+      this.commonObjs.clear();
+      this.fontLoader.clear();
+      this.#methodPromises.clear();
+      this.filterFactory.destroy();
+      TextLayer.cleanup();
+      this.#networkStream?.cancelAllRequests(new AbortException("Worker was terminated."));
+      this.messageHandler?.destroy();
+      this.messageHandler = null;
+      this.destroyCapability.resolve();
+    }, this.destroyCapability.reject);
+    return this.destroyCapability.promise;
+  }
+  setupMessageHandler() {
+    const {
+      messageHandler,
+      loadingTask
+    } = this;
+    messageHandler.on("GetReader", (data, sink) => {
+      util_assert(this.#networkStream, "GetReader - no `BasePDFStream` instance available.");
+      this.#fullReader = this.#networkStream.getFullReader();
+      this.#fullReader.onProgress = evt => this.#onProgress(evt);
+      sink.onPull = () => {
+        this.#fullReader.read().then(function ({
+          value,
+          done
+        }) {
+          if (done) {
+            sink.close();
+            return;
+          }
+          util_assert(value instanceof ArrayBuffer, "GetReader - expected an ArrayBuffer.");
+          sink.enqueue(new Uint8Array(value), 1, [value]);
+        }).catch(reason => {
+          sink.error(reason);
+        });
+      };
+      sink.onCancel = reason => {
+        this.#fullReader.cancel(reason);
+        sink.ready.catch(readyReason => {
+          if (this.destroyed) {
+            return;
+          }
+          throw readyReason;
+        });
+      };
+    });
+    messageHandler.on("ReaderHeadersReady", async data => {
+      await this.#fullReader.headersReady;
+      const {
+        isStreamingSupported,
+        isRangeSupported,
+        contentLength
+      } = this.#fullReader;
+      if (isStreamingSupported && isRangeSupported) {
+        this.#fullReader.onProgress = null;
+      }
+      return {
+        isStreamingSupported,
+        isRangeSupported,
+        contentLength
+      };
+    });
+    messageHandler.on("GetRangeReader", (data, sink) => {
+      util_assert(this.#networkStream, "GetRangeReader - no `BasePDFStream` instance available.");
+      const rangeReader = this.#networkStream.getRangeReader(data.begin, data.end);
+      if (!rangeReader) {
+        sink.close();
+        return;
+      }
+      sink.onPull = () => {
+        rangeReader.read().then(function ({
+          value,
+          done
+        }) {
+          if (done) {
+            sink.close();
+            return;
+          }
+          util_assert(value instanceof ArrayBuffer, "GetRangeReader - expected an ArrayBuffer.");
+          sink.enqueue(new Uint8Array(value), 1, [value]);
+        }).catch(reason => {
+          sink.error(reason);
+        });
+      };
+      sink.onCancel = reason => {
+        rangeReader.cancel(reason);
+        sink.ready.catch(readyReason => {
+          if (this.destroyed) {
+            return;
+          }
+          throw readyReason;
+        });
+      };
+    });
+    messageHandler.on("GetDoc", ({
+      pdfInfo
+    }) => {
+      this.pagesMapper.pagesNumber = pdfInfo.numPages;
+      this._numPages = pdfInfo.numPages;
+      this._htmlForXfa = pdfInfo.htmlForXfa;
+      delete pdfInfo.htmlForXfa;
+      loadingTask._capability.resolve(new PDFDocumentProxy(pdfInfo, this));
+    });
+    messageHandler.on("DocException", ex => {
+      loadingTask._capability.reject(wrapReason(ex));
+    });
+    messageHandler.on("PasswordRequest", ex => {
+      this.#passwordCapability = Promise.withResolvers();
+      try {
+        if (!loadingTask.onPassword) {
+          throw wrapReason(ex);
+        }
+        const updatePassword = password => {
+          if (password instanceof Error) {
+            this.#passwordCapability.reject(password);
+          } else {
+            this.#passwordCapability.resolve({
+              password
+            });
+          }
+        };
+        loadingTask.onPassword(updatePassword, ex.code);
+      } catch (err) {
+        this.#passwordCapability.reject(err);
+      }
+      return this.#passwordCapability.promise;
+    });
+    messageHandler.on("DataLoaded", data => {
+      this.#onProgress({
+        loaded: data.length,
+        total: data.length
+      });
+      this.downloadInfoCapability.resolve(data);
+    });
+    messageHandler.on("StartRenderPage", data => {
+      if (this.destroyed) {
+        return;
+      }
+      const page = this.#pageCache.get(data.pageProxyId);
+      page._startRenderPage(data.transparency, data.cacheKey);
+    });
+    messageHandler.on("commonobj", ([id, type, exportedData]) => {
+      if (this.destroyed) {
+        return null;
+      }
+      if (this.commonObjs.has(id)) {
+        return null;
+      }
+      switch (type) {
+        case "Font":
+          if ("error" in exportedData) {
+            const exportedError = exportedData.error;
+            warn(`Error during font loading: ${exportedError}`);
+            this.commonObjs.resolve(id, exportedError);
+            break;
+          }
+          const fontData = new FontInfo(exportedData.buffer);
+          const inspectFont = this._params.pdfBug && globalThis.FontInspector?.enabled ? (font, url) => globalThis.FontInspector.fontAdded(font, url) : null;
+          const font = new FontFaceObject(fontData, inspectFont, exportedData.charProcOperatorList, exportedData.extra);
+          this.fontLoader.bind(font).catch(() => messageHandler.sendWithPromise("FontFallback", {
+            id
+          })).finally(() => {
+            if (!font.fontExtraProperties) {
+              font.clearData();
+            }
+            this.commonObjs.resolve(id, font);
+          });
+          break;
+        case "CopyLocalImage":
+          const {
+            imageRef
+          } = exportedData;
+          util_assert(imageRef, "The imageRef must be defined.");
+          for (const pageProxy of this.#pageCache.values()) {
+            for (const [, data] of pageProxy.objs) {
+              if (data?.ref !== imageRef) {
+                continue;
+              }
+              if (!data.dataLen) {
+                return null;
+              }
+              const copy = structuredClone(data);
+              this.commonObjs.resolve(id, copy);
+              return data.dataLen;
+            }
+          }
+          break;
+        case "FontPath":
+          this.commonObjs.resolve(id, new FontPathInfo(exportedData));
+          break;
+        case "Image":
+          this.commonObjs.resolve(id, exportedData);
+          break;
+        case "Pattern":
+          const pattern = new PatternInfo(exportedData);
+          this.commonObjs.resolve(id, pattern.getIR());
+          break;
+        default:
+          throw new Error(`Got unknown common object type ${type}`);
+      }
+      return null;
+    });
+    messageHandler.on("obj", ([id, pageProxyId, type, imageData]) => {
+      if (this.destroyed) {
+        return;
+      }
+      const pageProxy = this.#pageCache.get(pageProxyId);
+      if (pageProxy.objs.has(id)) {
+        return;
+      }
+      if (pageProxy._intentStates.size === 0) {
+        imageData?.bitmap?.close();
+        return;
+      }
+      switch (type) {
+        case "Image":
+        case "Pattern":
+          pageProxy.objs.resolve(id, imageData);
+          break;
+        default:
+          throw new Error(`Got unknown object type ${type}`);
+      }
+    });
+    messageHandler.on("DocProgress", data => {
+      if (this.destroyed) {
+        return;
+      }
+      this.#onProgress(data);
+    });
+    messageHandler.on("FetchBinaryData", async data => {
+      if (this.destroyed) {
+        throw new Error("Worker was destroyed.");
+      }
+      if (!this.binaryDataFactory) {
+        throw new Error("`BinaryDataFactory` not initialized, see the `useWorkerFetch` parameter.");
+      }
+      return this.binaryDataFactory.fetch(data);
+    });
+  }
+  getData() {
+    return this.messageHandler.sendWithPromise("GetData", null);
+  }
+  saveDocument(printToPDF = null) {
+    if (this.annotationStorage.size <= 0) {
+      warn("saveDocument called while `annotationStorage` is empty, " + "please use the getData-method instead.");
+    }
+    const {
+      map,
+      transfer
+    } = this.annotationStorage.serializable;
+    return this.messageHandler.sendWithPromise("SaveDocument", {
+      isPureXfa: !!this._htmlForXfa,
+      numPages: this._numPages,
+      annotationStorage: map,
+      supportsPrintToPDF: this.#printToPDF !== null,
+      filename: this.#fullReader?.filename ?? null
+    }, transfer).finally(() => {
+      this.#printToPDF = null;
+      this.annotationStorage.resetModified();
+    });
+  }
+  extractPages(pageInfos, copyLevels = null) {
+    const params = {
+      pageInfos
+    };
+    let transfer;
+    const ImageBitmapCtor = globalThis.ImageBitmap;
+    if (typeof ImageBitmapCtor === "function") {
+      const infos = Array.isArray(pageInfos) ? pageInfos : [pageInfos];
+      for (const pageInfo of infos) {
+        if (pageInfo?.image instanceof ImageBitmapCtor) {
+          (transfer ||= []).push(pageInfo.image);
+        }
+      }
+    }
+    if (this.annotationStorage.size > 0) {
+      const serialized = this.annotationStorage.serializable;
+      let {
+        map
+      } = serialized;
+      if (serialized.transfer?.length) {
+        if (transfer) {
+          transfer.push(...serialized.transfer);
+        } else {
+          transfer = serialized.transfer;
+        }
+      }
+      const mapping = this.pagesMapper.getMapping();
+      if (mapping) {
+        const remapped = new Map();
+        for (const [k, v] of map) {
+          if (v?.pageIndex !== undefined && v.pageIndex >= 0 && v.pageIndex < mapping.length) {
+            const copyLevel = copyLevels?.[v.pageIndex] ?? 0;
+            const sourceIdx = mapping[v.pageIndex] - 1;
+            if (sourceIdx !== v.pageIndex || copyLevel !== 0) {
+              remapped.set(k, {
+                ...v,
+                pageIndex: sourceIdx,
+                copyLevel
+              });
+              continue;
+            }
+          }
+          remapped.set(k, v);
+        }
+        map = remapped;
+      }
+      params.annotationStorage = map;
+    }
+    return this.messageHandler.sendWithPromise("ExtractPages", params, transfer).finally(() => {
+      this.annotationStorage.resetModified();
+    });
+  }
+  getPage(pageNumber) {
+    if (!Number.isInteger(pageNumber) || pageNumber <= 0 || pageNumber > this.pagesMapper.pagesNumber) {
+      return Promise.reject(new Error("Invalid page request."));
+    }
+    const pageIndex = pageNumber - 1;
+    const newPageIndex = this.pagesMapper.getPageId(pageNumber) - 1;
+    const cachedPromise = this.#pagePromises.get(pageIndex);
+    if (cachedPromise) {
+      return cachedPromise;
+    }
+    const promise = this.messageHandler.sendWithPromise("GetPage", {
+      pageIndex: newPageIndex
+    }).then(pageInfo => {
+      if (this.destroyed) {
+        throw new Error("Transport destroyed");
+      }
+      if (pageInfo.refStr) {
+        this.#pageRefCache.set(pageInfo.refStr, newPageIndex);
+      }
+      const page = new PDFPageProxy(pageIndex, pageInfo, this, this.pagesMapper, this._params.pdfBug);
+      this.#pageCache.set(page._id, page);
+      return page;
+    });
+    this.#pagePromises.set(pageIndex, promise);
+    return promise;
+  }
+  async getPageIndex(ref) {
+    if (!isRefProxy(ref)) {
+      throw new Error("Invalid pageIndex request.");
+    }
+    const index = await this.messageHandler.sendWithPromise("GetPageIndex", {
+      num: ref.num,
+      gen: ref.gen
+    });
+    const pageNumber = this.pagesMapper.getPageNumber(index + 1);
+    if (pageNumber === 0) {
+      throw new Error("GetPageIndex: page has been removed.");
+    }
+    return pageNumber - 1;
+  }
+  getAnnotations(pageIndex, intent) {
+    return this.messageHandler.sendWithPromise("GetAnnotations", {
+      pageIndex: this.pagesMapper.getPageId(pageIndex + 1) - 1,
+      intent
+    });
+  }
+  getFieldObjects() {
+    return this.#cacheSimpleMethod("GetFieldObjects");
+  }
+  getSignatures() {
+    return this.#cacheSimpleMethod("GetSignatures");
+  }
+  getSignatureData(id) {
+    return this.messageHandler.sendWithPromise("GetSignatureData", id);
+  }
+  hasJSActions() {
+    return this.#cacheSimpleMethod("HasJSActions");
+  }
+  getCalculationOrderIds() {
+    return this.messageHandler.sendWithPromise("GetCalculationOrderIds", null);
+  }
+  getDestinations() {
+    return this.messageHandler.sendWithPromise("GetDestinations", null);
+  }
+  getDestination(id) {
+    return typeof id !== "string" ? Promise.reject(new Error("Invalid destination request.")) : this.messageHandler.sendWithPromise("GetDestination", {
+      id
+    });
+  }
+  getPageLabels() {
+    return this.messageHandler.sendWithPromise("GetPageLabels", null);
+  }
+  getPageLayout() {
+    return this.messageHandler.sendWithPromise("GetPageLayout", null);
+  }
+  getPageMode() {
+    return this.messageHandler.sendWithPromise("GetPageMode", null);
+  }
+  getViewerPreferences() {
+    return this.messageHandler.sendWithPromise("GetViewerPreferences", null);
+  }
+  getOpenAction() {
+    return this.messageHandler.sendWithPromise("GetOpenAction", null);
+  }
+  getAttachments() {
+    return this.messageHandler.sendWithPromise("GetAttachments", null);
+  }
+  getAttachmentContent(id) {
+    return this.messageHandler.sendWithPromise("GetAttachmentContent", id);
+  }
+  getAnnotationsByType(types, pageIndexesToSkip) {
+    return this.messageHandler.sendWithPromise("GetAnnotationsByType", {
+      types,
+      pageIndexesToSkip
+    });
+  }
+  getDocJSActions() {
+    return this.#cacheSimpleMethod("GetDocJSActions");
+  }
+  getPageJSActions(pageIndex) {
+    return this.messageHandler.sendWithPromise("GetPageJSActions", {
+      pageIndex: this.pagesMapper.getPageId(pageIndex + 1) - 1
+    });
+  }
+  getStructTree(pageIndex) {
+    return this.messageHandler.sendWithPromise("GetStructTree", {
+      pageIndex: this.pagesMapper.getPageId(pageIndex + 1) - 1
+    });
+  }
+  getOutline() {
+    return this.messageHandler.sendWithPromise("GetOutline", null);
+  }
+  getOptionalContentConfig(renderingIntent) {
+    return this.#cacheSimpleMethod("GetOptionalContentConfig").then(data => new OptionalContentConfig(data, renderingIntent));
+  }
+  getPermissions() {
+    return this.messageHandler.sendWithPromise("GetPermissions", null);
+  }
+  getMetadata() {
+    const name = "GetMetadata";
+    return this.#methodPromises.getOrInsertComputed(name, () => this.messageHandler.sendWithPromise(name, null).then(results => ({
+      info: results[0],
+      metadata: results[1] ? new Metadata(results[1]) : null,
+      contentDispositionFilename: this.#fullReader?.filename ?? null,
+      contentLength: this.#fullReader?.contentLength ?? null,
+      hasStructTree: results[2]
+    })));
+  }
+  getMarkInfo() {
+    return this.messageHandler.sendWithPromise("GetMarkInfo", null);
+  }
+  async startCleanup(keepLoadedFonts = false) {
+    if (this.destroyed) {
+      return;
+    }
+    await this.messageHandler.sendWithPromise("Cleanup", null);
+    for (const page of this.#pageCache.values()) {
+      const cleanupSuccessful = page.cleanup();
+      if (!cleanupSuccessful) {
+        throw new Error(`startCleanup: Page ${page.pageNumber} is currently rendering.`);
+      }
+    }
+    this.commonObjs.clear();
+    if (!keepLoadedFonts) {
+      this.fontLoader.clear();
+    }
+    this.#methodPromises.clear();
+    this.filterFactory.destroy(true);
+    TextLayer.cleanup();
+  }
+  cachedPageNumber(ref) {
+    if (!isRefProxy(ref)) {
+      return null;
+    }
+    const refStr = ref.gen === 0 ? `${ref.num}R` : `${ref.num}R${ref.gen}`;
+    const pageIndex = this.#pageRefCache.get(refStr);
+    if (pageIndex >= 0) {
+      const pageNumber = this.pagesMapper.getPageNumber(pageIndex + 1);
+      if (pageNumber !== 0) {
+        return pageNumber;
+      }
+    }
+    return null;
+  }
+}
+class RenderTask {
+  _internalRenderTask = null;
+  onContinue = null;
+  onError = null;
+  constructor(internalRenderTask) {
+    this._internalRenderTask = internalRenderTask;
+  }
+  get promise() {
+    return this._internalRenderTask.capability.promise;
+  }
+  cancel(extraDelay = 0) {
+    this._internalRenderTask.cancel(null, extraDelay);
+  }
+  get separateAnnots() {
+    const {
+      separateAnnots
+    } = this._internalRenderTask.operatorList;
+    if (!separateAnnots) {
+      return false;
+    }
+    const {
+      annotationCanvasMap
+    } = this._internalRenderTask;
+    return separateAnnots.form || separateAnnots.canvas && annotationCanvasMap?.size > 0;
+  }
+  get imageCoordinates() {
+    return this._internalRenderTask.imageCoordinates || null;
+  }
+}
+class InternalRenderTask {
+  #rAF = null;
+  static #canvasInUse = new WeakSet();
+  constructor({
+    callback,
+    params,
+    objs,
+    commonObjs,
+    annotationCanvasMap,
+    operatorList,
+    pageIndex,
+    canvasFactory,
+    filterFactory,
+    useRequestAnimationFrame = false,
+    pdfBug = false,
+    pageColors = null,
+    enableHWA = false,
+    operationsFilter = null
+  }) {
+    this.callback = callback;
+    this.params = params;
+    this.objs = objs;
+    this.commonObjs = commonObjs;
+    this.annotationCanvasMap = annotationCanvasMap;
+    this.operatorListIdx = null;
+    this.operatorList = operatorList;
+    this._pageIndex = pageIndex;
+    this.canvasFactory = canvasFactory;
+    this.filterFactory = filterFactory;
+    this._pdfBug = pdfBug;
+    this.pageColors = pageColors;
+    this.running = false;
+    this.graphicsReadyCallback = null;
+    this.graphicsReady = false;
+    this._useRequestAnimationFrame = useRequestAnimationFrame === true && typeof window !== "undefined";
+    this.cancelled = false;
+    this.capability = Promise.withResolvers();
+    this.task = new RenderTask(this);
+    this._cancelBound = this.cancel.bind(this);
+    this._continueBound = this._continue.bind(this);
+    this._scheduleNextBound = this._scheduleNext.bind(this);
+    this._nextBound = this._next.bind(this);
+    this._canvas = params.canvas;
+    this._canvasContext = params.canvas ? null : params.canvasContext;
+    this._enableHWA = enableHWA;
+    this._dependencyTracker = params.dependencyTracker;
+    this._imagesTracker = params.imagesTracker;
+    this._operationsFilter = operationsFilter;
+  }
+  get completed() {
+    return this.capability.promise.catch(() => {});
+  }
+  initializeGraphics({
+    transparency = false,
+    optionalContentConfig
+  }) {
+    if (this.cancelled) {
+      return;
+    }
+    if (this._canvas) {
+      if (InternalRenderTask.#canvasInUse.has(this._canvas)) {
+        throw new Error("Cannot use the same canvas during multiple render() operations. " + "Use different canvas or ensure previous operations were " + "cancelled or completed.");
+      }
+      InternalRenderTask.#canvasInUse.add(this._canvas);
+    }
+    if (this._pdfBug && globalThis.StepperManager?.enabled) {
+      this.stepper = globalThis.StepperManager.create(this._pageIndex);
+      this.stepper.init(this.operatorList);
+      this.stepper.nextBreakPoint = this.stepper.getNextBreakPoint();
+    }
+    const {
+      viewport,
+      transform,
+      background,
+      dependencyTracker,
+      imagesTracker
+    } = this.params;
+    const canvasContext = this._canvasContext || this._canvas.getContext("2d", {
+      alpha: false,
+      willReadFrequently: !this._enableHWA
+    });
+    this.gfx = new CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
+      optionalContentConfig
+    }, this.annotationCanvasMap, this.pageColors, dependencyTracker, imagesTracker);
+    this.gfx.beginDrawing({
+      transform,
+      viewport,
+      transparency,
+      background
+    });
+    this.operatorListIdx = 0;
+    this.graphicsReady = true;
+    this.graphicsReadyCallback?.();
+  }
+  cancel(error = null, extraDelay = 0) {
+    this.running = false;
+    this.cancelled = true;
+    this.gfx?.endDrawing();
+    if (this.#rAF) {
+      window.cancelAnimationFrame(this.#rAF);
+      this.#rAF = null;
+    }
+    InternalRenderTask.#canvasInUse.delete(this._canvas);
+    error ||= new RenderingCancelledException(`Rendering cancelled, page ${this._pageIndex + 1}`, extraDelay);
+    this.callback(error);
+    this.task.onError?.(error);
+  }
+  operatorListChanged() {
+    if (!this.graphicsReady) {
+      this.graphicsReadyCallback ||= this._continueBound;
+      return;
+    }
+    this.gfx.dependencyTracker?.growOperationsCount(this.operatorList.fnArray.length);
+    this.stepper?.updateOperatorList(this.operatorList);
+    if (this.running) {
+      return;
+    }
+    this._continue();
+  }
+  _continue() {
+    this.running = true;
+    if (this.cancelled) {
+      return;
+    }
+    if (this.task.onContinue) {
+      this.task.onContinue(this._scheduleNextBound);
+    } else {
+      this._scheduleNext();
+    }
+  }
+  _scheduleNext() {
+    if (this._useRequestAnimationFrame) {
+      this.#rAF = window.requestAnimationFrame(() => {
+        this.#rAF = null;
+        this._nextBound().catch(this._cancelBound);
+      });
+    } else {
+      Promise.resolve().then(this._nextBound).catch(this._cancelBound);
+    }
+  }
+  async _next() {
+    if (this.cancelled) {
+      return;
+    }
+    this.operatorListIdx = this.gfx.executeOperatorList(this.operatorList, this.operatorListIdx, this._continueBound, this.stepper, this._operationsFilter);
+    if (this.operatorListIdx === this.operatorList.argsArray.length) {
+      this.running = false;
+      if (this.operatorList.lastChunk) {
+        this.gfx.endDrawing();
+        InternalRenderTask.#canvasInUse.delete(this._canvas);
+        this.callback();
+      }
+    }
+  }
+}
+const api_version = "6.4.299";
+const build = "d0991a0d5";
+
+;// ./node_modules/core-js/modules/es.math.sum-precise.js
+es_math_sum_precise_namespaceFn();
+
+;// ./src/display/editor/color_picker.js
+
+
+
+class ColorPicker {
+  #button = null;
+  #buttonSwatch = null;
+  #defaultColor;
+  #dropdown = null;
+  #dropdownWasFromKeyboard = false;
+  #isMainColorPicker = false;
+  #editor = null;
+  #eventBus;
+  #openDropdownAC = null;
+  #uiManager = null;
+  static #l10nColor = null;
+  static get _keyboardManager() {
+    return util_shadow(this, "_keyboardManager", new KeyboardManager([[["Escape"], ColorPicker.prototype._hideDropdownFromKeyboard], [["Space"], ColorPicker.prototype._colorSelectFromKeyboard], [["ArrowDown", "ArrowRight"], ColorPicker.prototype._moveToNext], [["ArrowUp", "ArrowLeft"], ColorPicker.prototype._moveToPrevious], [["Home"], ColorPicker.prototype._moveToBeginning], [["End"], ColorPicker.prototype._moveToEnd]]));
+  }
+  constructor({
+    editor = null,
+    uiManager = null
+  }) {
+    if (editor) {
+      this.#isMainColorPicker = false;
+      this.#editor = editor;
+    } else {
+      this.#isMainColorPicker = true;
+    }
+    this.#uiManager = editor?._uiManager || uiManager;
+    this.#eventBus = this.#uiManager._eventBus;
+    this.#defaultColor = editor?.color?.toUpperCase() || this.#uiManager?.highlightColors.values().next().value || "#FFFF98";
+    ColorPicker.#l10nColor ||= Object.freeze({
+      blue: "pdfjs-editor-colorpicker-blue",
+      green: "pdfjs-editor-colorpicker-green",
+      pink: "pdfjs-editor-colorpicker-pink",
+      red: "pdfjs-editor-colorpicker-red",
+      yellow: "pdfjs-editor-colorpicker-yellow"
+    });
+  }
+  renderButton() {
+    const button = this.#button = document.createElement("button");
+    button.className = "colorPicker";
+    button.tabIndex = "0";
+    button.setAttribute("data-l10n-id", "pdfjs-editor-colorpicker-button");
+    button.ariaHasPopup = "true";
+    if (this.#editor) {
+      button.ariaControls = `${this.#editor.id}_colorpicker_dropdown`;
+    }
+    const signal = this.#uiManager._signal;
+    button.addEventListener("click", this.#openDropdown.bind(this), {
+      signal
+    });
+    button.addEventListener("keydown", this.#keyDown.bind(this), {
+      signal
+    });
+    const swatch = this.#buttonSwatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.ariaHidden = "true";
+    swatch.style.backgroundColor = this.#defaultColor;
+    button.append(swatch);
+    return button;
+  }
+  renderMainDropdown() {
+    const dropdown = this.#dropdown = this.#getDropdownRoot();
+    dropdown.ariaOrientation = "horizontal";
+    dropdown.ariaLabelledBy = "highlightColorPickerLabel";
+    return dropdown;
+  }
+  #getDropdownRoot() {
+    const div = document.createElement("div");
+    const signal = this.#uiManager._signal;
+    div.addEventListener("contextmenu", noContextMenu, {
+      signal
+    });
+    div.className = "dropdown";
+    div.role = "listbox";
+    div.ariaMultiSelectable = "false";
+    div.ariaOrientation = "vertical";
+    div.setAttribute("data-l10n-id", "pdfjs-editor-colorpicker-dropdown");
+    if (this.#editor) {
+      div.id = `${this.#editor.id}_colorpicker_dropdown`;
+    }
+    for (const [name, color] of this.#uiManager.highlightColors) {
+      const button = document.createElement("button");
+      button.tabIndex = "0";
+      button.role = "option";
+      button.setAttribute("data-color", color);
+      button.title = name;
+      button.setAttribute("data-l10n-id", ColorPicker.#l10nColor[name]);
+      const swatch = document.createElement("span");
+      button.append(swatch);
+      swatch.className = "swatch";
+      swatch.style.backgroundColor = color;
+      button.ariaSelected = color === this.#defaultColor;
+      button.addEventListener("click", this.#colorSelect.bind(this, color), {
+        signal
+      });
+      div.append(button);
+    }
+    div.addEventListener("keydown", this.#keyDown.bind(this), {
+      signal
+    });
+    return div;
+  }
+  #colorSelect(color, event) {
+    event.stopPropagation();

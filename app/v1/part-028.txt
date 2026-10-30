@@ -1,0 +1,1000 @@
+      }
+      storage.setValue(id, {
+        value: checked
+      });
+    });
+    element.addEventListener("resetform", event => {
+      const defaultValue = data.defaultFieldValue;
+      event.target.checked = defaultValue !== null && defaultValue !== undefined && defaultValue === data.buttonValue;
+    });
+    if (this.enableScripting && this.hasJSActions) {
+      const pdfButtonValue = data.buttonValue;
+      element.addEventListener("updatefromsandbox", jsEvent => {
+        const actions = {
+          value: event => {
+            const checked = pdfButtonValue === event.detail.value;
+            for (const radio of this._getElementsByName(event.target.name)) {
+              const curChecked = checked && radio.id === id;
+              if (radio.domElement) {
+                radio.domElement.checked = curChecked;
+              }
+              storage.setValue(radio.id, {
+                value: curChecked
+              });
+            }
+          }
+        };
+        this._dispatchEventFromSandbox(actions, jsEvent);
+      });
+      this._setEventListeners(element, null, [["change", "Validate"], ["change", "Action"], ["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.checked);
+    }
+    this._setDefaultPropertiesFromJS(element);
+    this.container.append(element);
+    return this.container;
+  }
+}
+class PushButtonWidgetAnnotationElement extends LinkAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      ignoreBorder: parameters.data.hasAppearance
+    });
+  }
+  render() {
+    const container = super.render();
+    container.classList.add("buttonWidgetAnnotation", "pushButton");
+    const linkElement = container.lastChild;
+    if (this.enableScripting && this.hasJSActions && linkElement) {
+      this._setDefaultPropertiesFromJS(linkElement);
+      linkElement.addEventListener("updatefromsandbox", jsEvent => {
+        this._dispatchEventFromSandbox({}, jsEvent);
+      });
+    }
+    return container;
+  }
+}
+class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: parameters.renderForms
+    });
+  }
+  render() {
+    this.container.classList.add("choiceWidgetAnnotation");
+    const storage = this.annotationStorage;
+    const id = this.data.id;
+    const storedData = storage.getValue(id, {
+      value: this.data.fieldValue
+    });
+    const selectElement = document.createElement("select");
+    GetElementsByNameSet.add(selectElement);
+    selectElement.setAttribute("data-element-id", id);
+    selectElement.disabled = this.data.readOnly;
+    this._setRequired(selectElement, this.data.required);
+    selectElement.name = this.data.fieldName;
+    selectElement.tabIndex = 0;
+    let addAnEmptyEntry = this.data.combo && this.data.options.length > 0;
+    if (!this.data.combo) {
+      selectElement.size = this.data.options.length;
+      if (this.data.multiSelect) {
+        selectElement.multiple = true;
+      }
+    }
+    selectElement.addEventListener("resetform", event => {
+      const defaultValue = this.data.defaultFieldValue;
+      for (const option of selectElement.options) {
+        option.selected = option.value === defaultValue;
+      }
+    });
+    const fixDisplayValue = (option, value) => {
+      const newValue = value.replaceAll(" ", "\u00A0");
+      option.textContent = newValue;
+      if (newValue !== value) {
+        option.setAttribute("display-value", value);
+      }
+    };
+    for (const option of this.data.options) {
+      const optionElement = document.createElement("option");
+      fixDisplayValue(optionElement, option.displayValue);
+      optionElement.value = option.exportValue;
+      if (storedData.value.includes(option.exportValue)) {
+        optionElement.setAttribute("selected", true);
+        addAnEmptyEntry = false;
+      }
+      selectElement.append(optionElement);
+    }
+    let removeEmptyEntry = null;
+    if (addAnEmptyEntry) {
+      const noneOptionElement = document.createElement("option");
+      noneOptionElement.value = " ";
+      noneOptionElement.setAttribute("hidden", true);
+      noneOptionElement.setAttribute("selected", true);
+      selectElement.prepend(noneOptionElement);
+      removeEmptyEntry = () => {
+        noneOptionElement.remove();
+        selectElement.removeEventListener("input", removeEmptyEntry);
+        removeEmptyEntry = null;
+      };
+      selectElement.addEventListener("input", removeEmptyEntry);
+    }
+    const getValue = isExport => {
+      const name = isExport ? "value" : "textContent";
+      const {
+        options,
+        multiple
+      } = selectElement;
+      if (!multiple) {
+        return options.selectedIndex === -1 ? null : options[options.selectedIndex][name];
+      }
+      return Array.prototype.filter.call(options, option => option.selected).map(option => option[name]);
+    };
+    let selectedValues = getValue(false);
+    const getItems = event => {
+      const options = event.target.options;
+      return Array.prototype.map.call(options, option => ({
+        displayValue: option.getAttribute("display-value") || option.textContent,
+        exportValue: option.value
+      }));
+    };
+    if (this.enableScripting && this.hasJSActions) {
+      selectElement.addEventListener("updatefromsandbox", jsEvent => {
+        const actions = {
+          value(event) {
+            removeEmptyEntry?.();
+            const value = event.detail.value;
+            const values = new Set(Array.isArray(value) ? value : [value]);
+            for (const option of selectElement.options) {
+              option.selected = values.has(option.value);
+            }
+            storage.setValue(id, {
+              value: getValue(true)
+            });
+            selectedValues = getValue(false);
+          },
+          multipleSelection(event) {
+            selectElement.multiple = true;
+          },
+          remove(event) {
+            const options = selectElement.options;
+            const index = event.detail.remove;
+            options[index].selected = false;
+            selectElement.remove(index);
+            if (options.length > 0) {
+              const i = Array.prototype.findIndex.call(options, option => option.selected);
+              if (i === -1) {
+                options[0].selected = true;
+              }
+            }
+            storage.setValue(id, {
+              value: getValue(true),
+              items: getItems(event)
+            });
+            selectedValues = getValue(false);
+          },
+          clear(event) {
+            while (selectElement.length !== 0) {
+              selectElement.remove(0);
+            }
+            storage.setValue(id, {
+              value: null,
+              items: []
+            });
+            selectedValues = getValue(false);
+          },
+          insert(event) {
+            const {
+              index,
+              displayValue,
+              exportValue
+            } = event.detail.insert;
+            const selectChild = selectElement.children[index];
+            const optionElement = document.createElement("option");
+            fixDisplayValue(optionElement, displayValue);
+            optionElement.value = exportValue;
+            if (selectChild) {
+              selectChild.before(optionElement);
+            } else {
+              selectElement.append(optionElement);
+            }
+            storage.setValue(id, {
+              value: getValue(true),
+              items: getItems(event)
+            });
+            selectedValues = getValue(false);
+          },
+          items(event) {
+            const {
+              items
+            } = event.detail;
+            while (selectElement.length !== 0) {
+              selectElement.remove(0);
+            }
+            for (const item of items) {
+              const {
+                displayValue,
+                exportValue
+              } = item;
+              const optionElement = document.createElement("option");
+              fixDisplayValue(optionElement, displayValue);
+              optionElement.value = exportValue;
+              selectElement.append(optionElement);
+            }
+            if (selectElement.options.length > 0) {
+              selectElement.options[0].selected = true;
+            }
+            storage.setValue(id, {
+              value: getValue(true),
+              items: getItems(event)
+            });
+            selectedValues = getValue(false);
+          },
+          indices(event) {
+            const indices = new Set(event.detail.indices);
+            for (const option of event.target.options) {
+              option.selected = indices.has(option.index);
+            }
+            storage.setValue(id, {
+              value: getValue(true)
+            });
+            selectedValues = getValue(false);
+          },
+          editable(event) {
+            event.target.disabled = !event.detail.editable;
+          }
+        };
+        this._dispatchEventFromSandbox(actions, jsEvent);
+      });
+      selectElement.addEventListener("input", event => {
+        const exportValue = getValue(true);
+        const change = getValue(false);
+        storage.setValue(id, {
+          value: exportValue
+        });
+        event.preventDefault();
+        this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+          source: this,
+          detail: {
+            id,
+            name: "Keystroke",
+            value: selectedValues,
+            change,
+            changeEx: exportValue,
+            willCommit: false,
+            commitKey: 1,
+            keyDown: false
+          }
+        });
+      });
+      this._setEventListeners(selectElement, null, [["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"], ["input", "Action"], ["input", "Validate"]], event => event.target.value);
+    } else {
+      selectElement.addEventListener("input", function (event) {
+        storage.setValue(id, {
+          value: getValue(true)
+        });
+      });
+    }
+    if (this.data.combo) {
+      this._setTextStyle(selectElement);
+    } else {}
+    this._setBackgroundColor(selectElement);
+    this._setDefaultPropertiesFromJS(selectElement);
+    this.container.append(selectElement);
+    return this.container;
+  }
+}
+class PopupAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    const {
+      data,
+      elements,
+      parent
+    } = parameters;
+    const hasCommentManager = !!parent._commentManager;
+    super(parameters, {
+      isRenderable: !hasCommentManager && AnnotationElement._hasPopupData(data)
+    });
+    this.elements = elements;
+    if (hasCommentManager && AnnotationElement._hasPopupData(data)) {
+      const popup = this.popup = this.#createPopup();
+      for (const element of elements) {
+        element.popup = popup;
+      }
+    } else {
+      this.popup = null;
+    }
+  }
+  #createPopup() {
+    return new PopupElement({
+      container: this.container,
+      color: this.data.color,
+      titleObj: this.data.titleObj,
+      modificationDate: this.data.modificationDate || this.data.creationDate,
+      contentsObj: this.data.contentsObj,
+      richText: this.data.richText,
+      rect: this.data.rect,
+      parentRect: this.data.parentRect || null,
+      parent: this.parent,
+      elements: this.elements,
+      open: this.data.open,
+      commentManager: this.parent._commentManager
+    });
+  }
+  render() {
+    const {
+      container
+    } = this;
+    container.classList.add("popupAnnotation");
+    container.role = "comment";
+    const popup = this.popup = this.#createPopup();
+    const elementIds = [];
+    for (const element of this.elements) {
+      element.popup = popup;
+      element.container.ariaHasPopup = "dialog";
+      elementIds.push(element.data.id);
+      element.addHighlightArea();
+    }
+    this.container.setAttribute("aria-controls", elementIds.map(id => `${AnnotationPrefix}${id}`).join(","));
+    return this.container;
+  }
+}
+class PopupElement {
+  #commentManager = null;
+  #boundKeyDown = this.#keyDown.bind(this);
+  #boundHide = this.#hide.bind(this);
+  #boundShow = this.#show.bind(this);
+  #boundToggle = this.#toggle.bind(this);
+  #color = null;
+  #container = null;
+  #contentsObj = null;
+  #dateObj = null;
+  #elements = null;
+  #parent = null;
+  #parentRect = null;
+  #pinned = false;
+  #popup = null;
+  #popupAbortController = null;
+  #position = null;
+  #commentButton = null;
+  #commentButtonPosition = null;
+  #popupPosition = null;
+  #rect = null;
+  #richText = null;
+  #titleObj = null;
+  #updates = null;
+  #wasVisible = false;
+  #firstElement = null;
+  #commentText = null;
+  constructor({
+    container,
+    color,
+    elements,
+    titleObj,
+    modificationDate,
+    contentsObj,
+    richText,
+    parent,
+    rect,
+    parentRect,
+    open,
+    commentManager = null
+  }) {
+    this.#container = container;
+    this.#titleObj = titleObj;
+    this.#contentsObj = contentsObj;
+    this.#richText = richText;
+    this.#parent = parent;
+    this.#color = color;
+    this.#rect = rect;
+    this.#parentRect = parentRect;
+    this.#elements = elements;
+    this.#commentManager = commentManager;
+    this.#firstElement = elements[0];
+    this.#dateObj = PDFDateString.toDateObject(modificationDate);
+    this.trigger = elements.flatMap(e => e.getElementsToTriggerPopup());
+    if (!commentManager) {
+      this.#addEventListeners();
+      this.#container.hidden = true;
+      if (open) {
+        this.#toggle();
+      }
+    }
+  }
+  #addEventListeners() {
+    if (this.#popupAbortController) {
+      return;
+    }
+    this.#popupAbortController = new AbortController();
+    const {
+      signal
+    } = this.#popupAbortController;
+    for (const element of this.trigger) {
+      element.addEventListener("click", this.#boundToggle, {
+        signal
+      });
+      element.addEventListener("pointerenter", this.#boundShow, {
+        signal
+      });
+      element.addEventListener("pointerleave", this.#boundHide, {
+        signal
+      });
+      element.classList.add("popupTriggerArea");
+    }
+    for (const element of this.#elements) {
+      element.container?.addEventListener("keydown", this.#boundKeyDown, {
+        signal
+      });
+    }
+  }
+  #setCommentButtonPosition() {
+    const element = this.#elements.find(e => e.hasCommentButton);
+    if (!element) {
+      return;
+    }
+    this.#commentButtonPosition = element._normalizePoint(element.commentButtonPosition);
+  }
+  renderCommentButton() {
+    if (this.#commentButton) {
+      if (!this.#commentButton.parentNode) {
+        this.#firstElement.container.after(this.#commentButton);
+      }
+      return;
+    }
+    if (!this.#commentButtonPosition) {
+      this.#setCommentButtonPosition();
+    }
+    if (!this.#commentButtonPosition) {
+      return;
+    }
+    const {
+      signal
+    } = this.#popupAbortController = new AbortController();
+    const hasOwnButton = this.#firstElement.hasOwnCommentButton;
+    const togglePopup = () => {
+      this.#commentManager.toggleCommentPopup(this, true, undefined, !hasOwnButton);
+    };
+    const showPopup = () => {
+      this.#commentManager.toggleCommentPopup(this, false, true, !hasOwnButton);
+    };
+    const hidePopup = () => {
+      this.#commentManager.toggleCommentPopup(this, false, false);
+    };
+    if (!hasOwnButton) {
+      const button = this.#commentButton = document.createElement("button");
+      button.className = "annotationCommentButton";
+      const parentContainer = this.#firstElement.container;
+      button.style.zIndex = parseInt(parentContainer.style.zIndex, 10) + 1;
+      button.tabIndex = 0;
+      button.ariaHasPopup = "dialog";
+      button.ariaControls = "commentPopup";
+      button.setAttribute("data-l10n-id", "pdfjs-show-comment-button");
+      this.#updateColor();
+      this.#updateCommentButtonPosition();
+      button.addEventListener("keydown", this.#boundKeyDown, {
+        signal
+      });
+      button.addEventListener("click", togglePopup, {
+        signal
+      });
+      button.addEventListener("pointerenter", showPopup, {
+        signal
+      });
+      button.addEventListener("pointerleave", hidePopup, {
+        signal
+      });
+      parentContainer.after(button);
+    } else {
+      this.#commentButton = this.#firstElement.container;
+      for (const element of this.trigger) {
+        element.ariaHasPopup = "dialog";
+        element.ariaControls = "commentPopup";
+        element.addEventListener("keydown", this.#boundKeyDown, {
+          signal
+        });
+        element.addEventListener("click", togglePopup, {
+          signal
+        });
+        element.addEventListener("pointerenter", showPopup, {
+          signal
+        });
+        element.addEventListener("pointerleave", hidePopup, {
+          signal
+        });
+        element.classList.add("popupTriggerArea");
+      }
+    }
+  }
+  #updateCommentButtonPosition() {
+    if (this.#firstElement.extraPopupElement && !this.#firstElement.editor) {
+      return;
+    }
+    if (!this.#commentButton) {
+      this.renderCommentButton();
+    }
+    const [x, y] = this.#commentButtonPosition;
+    const {
+      style
+    } = this.#commentButton;
+    style.left = `calc(${x}%)`;
+    style.top = `calc(${y}% - var(--comment-button-dim))`;
+  }
+  #updateColor() {
+    if (this.#firstElement.extraPopupElement) {
+      return;
+    }
+    if (!this.#commentButton) {
+      this.renderCommentButton();
+    }
+    this.#commentButton.style.backgroundColor = this.commentButtonColor || "";
+  }
+  get commentButtonColor() {
+    const {
+      color,
+      opacity
+    } = this.#firstElement.commentData;
+    return !color ? null : this.#parent._commentManager.makeCommentColor(color, opacity);
+  }
+  focusCommentButton() {
+    setTimeout(() => {
+      this.#commentButton?.focus();
+    }, 0);
+  }
+  getData() {
+    const {
+      richText,
+      color,
+      opacity,
+      creationDate,
+      modificationDate
+    } = this.#firstElement.commentData;
+    return {
+      contentsObj: {
+        str: this.comment
+      },
+      richText,
+      color,
+      opacity,
+      creationDate,
+      modificationDate
+    };
+  }
+  get elementBeforePopup() {
+    return this.#commentButton;
+  }
+  get comment() {
+    this.#commentText ||= this.#firstElement.commentText;
+    return this.#commentText;
+  }
+  set comment(text) {
+    if (text === this.comment) {
+      return;
+    }
+    this.#firstElement.commentText = this.#commentText = text;
+  }
+  focus() {
+    this.#firstElement.container?.focus();
+  }
+  get parentBoundingClientRect() {
+    return this.#firstElement.layer.getBoundingClientRect();
+  }
+  setCommentButtonStates({
+    selected,
+    hasPopup
+  }) {
+    if (!this.#commentButton) {
+      return;
+    }
+    this.#commentButton.classList.toggle("selected", selected);
+    this.#commentButton.ariaExpanded = hasPopup;
+  }
+  setSelectedCommentButton(selected) {
+    this.#commentButton.classList.toggle("selected", selected);
+  }
+  get commentPopupPosition() {
+    if (this.#popupPosition) {
+      return this.#popupPosition;
+    }
+    const {
+      x,
+      y,
+      height
+    } = this.#commentButton.getBoundingClientRect();
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = this.#firstElement.layer.getBoundingClientRect();
+    return [(x - parentX) / parentWidth, (y + height - parentY) / parentHeight];
+  }
+  set commentPopupPosition(pos) {
+    this.#popupPosition = pos;
+  }
+  hasDefaultPopupPosition() {
+    return this.#popupPosition === null;
+  }
+  get commentButtonPosition() {
+    return this.#commentButtonPosition;
+  }
+  get commentButtonWidth() {
+    return this.#commentButton.getBoundingClientRect().width / this.parentBoundingClientRect.width;
+  }
+  editComment(options) {
+    const [posX, posY] = this.#popupPosition || this.commentButtonPosition.map(x => x / 100);
+    const parentDimensions = this.parentBoundingClientRect;
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = parentDimensions;
+    this.#commentManager.showDialog(null, this, parentX + posX * parentWidth, parentY + posY * parentHeight, {
+      ...options,
+      parentDimensions
+    });
+  }
+  render() {
+    if (this.#popup) {
+      return;
+    }
+    const popup = this.#popup = document.createElement("div");
+    popup.className = "popup";
+    if (this.#color) {
+      const baseColor = popup.style.outlineColor = Util.makeHexColor(...this.#color);
+      popup.style.backgroundColor = `color-mix(in srgb, ${baseColor} 30%, white)`;
+    }
+    const header = document.createElement("span");
+    header.className = "header";
+    if (this.#titleObj?.str) {
+      const title = document.createElement("span");
+      title.className = "title";
+      header.append(title);
+      ({
+        dir: title.dir,
+        str: title.textContent
+      } = this.#titleObj);
+    }
+    popup.append(header);
+    if (this.#dateObj) {
+      const modificationDate = document.createElement("time");
+      modificationDate.className = "popupDate";
+      modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-time-string");
+      modificationDate.setAttribute("data-l10n-args", JSON.stringify({
+        dateObj: this.#dateObj.valueOf()
+      }));
+      modificationDate.dateTime = this.#dateObj.toISOString();
+      header.append(modificationDate);
+    }
+    renderRichText({
+      html: this.#html || this.#contentsObj.str,
+      dir: this.#contentsObj?.dir,
+      className: "popupContent"
+    }, popup);
+    this.#container.append(popup);
+  }
+  get #html() {
+    const richText = this.#richText;
+    const contentsObj = this.#contentsObj;
+    if (richText?.str && (!contentsObj?.str || contentsObj.str === richText.str)) {
+      return this.#richText.html || null;
+    }
+    return null;
+  }
+  get #fontSize() {
+    return this.#html?.attributes?.style?.fontSize || 0;
+  }
+  get #fontColor() {
+    return this.#html?.attributes?.style?.color || null;
+  }
+  #makePopupContent(text) {
+    const popupLines = [];
+    const popupContent = {
+      str: text,
+      html: {
+        name: "div",
+        attributes: {
+          dir: "auto"
+        },
+        children: [{
+          name: "p",
+          children: popupLines
+        }]
+      }
+    };
+    const lineAttributes = {
+      style: {
+        color: this.#fontColor,
+        fontSize: this.#fontSize ? `calc(${this.#fontSize}px * var(--total-scale-factor))` : ""
+      }
+    };
+    for (const line of text.split("\n")) {
+      popupLines.push({
+        name: "span",
+        value: line,
+        attributes: lineAttributes
+      });
+    }
+    return popupContent;
+  }
+  #keyDown(event) {
+    if (event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+    if (event.key === "Enter" || event.key === "Escape" && this.#pinned) {
+      this.#toggle();
+    }
+  }
+  updateEdited({
+    rect,
+    popup,
+    deleted
+  }) {
+    if (this.#commentManager) {
+      if (deleted) {
+        this.remove();
+        this.#commentText = null;
+      } else if (popup) {
+        if (popup.deleted) {
+          this.remove();
+        } else {
+          this.#updateColor();
+          this.#commentText = popup.text;
+        }
+      }
+      if (rect) {
+        this.#commentButtonPosition = null;
+        this.#setCommentButtonPosition();
+        this.#updateCommentButtonPosition();
+      }
+      return;
+    }
+    if (deleted || popup?.deleted) {
+      this.remove();
+      return;
+    }
+    this.#addEventListeners();
+    this.#updates ||= {
+      contentsObj: this.#contentsObj,
+      richText: this.#richText
+    };
+    if (rect) {
+      this.#position = null;
+    }
+    if (popup && popup.text) {
+      this.#richText = this.#makePopupContent(popup.text);
+      this.#dateObj = PDFDateString.toDateObject(popup.date);
+      this.#contentsObj = null;
+    }
+    this.#popup?.remove();
+    this.#popup = null;
+  }
+  resetEdited() {
+    if (!this.#updates) {
+      return;
+    }
+    ({
+      contentsObj: this.#contentsObj,
+      richText: this.#richText
+    } = this.#updates);
+    this.#updates = null;
+    this.#popup?.remove();
+    this.#popup = null;
+    this.#position = null;
+  }
+  remove() {
+    this.#popupAbortController?.abort();
+    this.#popupAbortController = null;
+    this.#popup?.remove();
+    this.#popup = null;
+    this.#wasVisible = false;
+    this.#pinned = false;
+    this.#commentButton?.remove();
+    this.#commentButton = null;
+    if (this.trigger) {
+      for (const element of this.trigger) {
+        element.classList.remove("popupTriggerArea");
+      }
+    }
+  }
+  #setPosition() {
+    if (this.#position !== null) {
+      return;
+    }
+    const {
+      page: {
+        view
+      },
+      viewport: {
+        rawDims: {
+          pageWidth,
+          pageHeight,
+          pageX,
+          pageY
+        }
+      }
+    } = this.#parent;
+    let useParentRect = !!this.#parentRect;
+    let rect = useParentRect ? this.#parentRect : this.#rect;
+    for (const element of this.#elements) {
+      if (!rect || Util.intersect(element.data.rect, rect) !== null) {
+        rect = element.data.rect;
+        useParentRect = true;
+        break;
+      }
+    }
+    const normalizedRect = Util.normalizeRect([rect[0], view[3] - rect[1] + view[1], rect[2], view[3] - rect[3] + view[1]]);
+    const HORIZONTAL_SPACE_AFTER_ANNOTATION = 5;
+    const parentWidth = useParentRect ? rect[2] - rect[0] + HORIZONTAL_SPACE_AFTER_ANNOTATION : 0;
+    const popupLeft = normalizedRect[0] + parentWidth;
+    const popupTop = normalizedRect[1];
+    this.#position = [100 * (popupLeft - pageX) / pageWidth, 100 * (popupTop - pageY) / pageHeight];
+    const {
+      style
+    } = this.#container;
+    style.left = `${this.#position[0]}%`;
+    style.top = `${this.#position[1]}%`;
+  }
+  #toggle() {
+    if (this.#commentManager) {
+      this.#commentManager.toggleCommentPopup(this, false);
+      return;
+    }
+    this.#pinned = !this.#pinned;
+    if (this.#pinned) {
+      this.#show();
+      this.#container.addEventListener("click", this.#boundToggle);
+      this.#container.addEventListener("keydown", this.#boundKeyDown);
+    } else {
+      this.#hide();
+      this.#container.removeEventListener("click", this.#boundToggle);
+      this.#container.removeEventListener("keydown", this.#boundKeyDown);
+    }
+  }
+  #show() {
+    if (!this.#popup) {
+      this.render();
+    }
+    if (!this.isVisible) {
+      this.#setPosition();
+      this.#container.hidden = false;
+      this.#container.style.zIndex = parseInt(this.#container.style.zIndex, 10) + 1000;
+    } else if (this.#pinned) {
+      this.#container.classList.add("focused");
+    }
+  }
+  #hide() {
+    this.#container.classList.remove("focused");
+    if (this.#pinned || !this.isVisible) {
+      return;
+    }
+    this.#container.hidden = true;
+    this.#container.style.zIndex = parseInt(this.#container.style.zIndex, 10) - 1000;
+  }
+  forceHide() {
+    this.#wasVisible = this.isVisible;
+    if (!this.#wasVisible) {
+      return;
+    }
+    this.#container.hidden = true;
+  }
+  maybeShow() {
+    if (this.#commentManager) {
+      return;
+    }
+    this.#addEventListeners();
+    if (!this.#wasVisible) {
+      return;
+    }
+    if (!this.#popup) {
+      this.#show();
+    }
+    this.#wasVisible = false;
+    this.#container.hidden = false;
+  }
+  get isVisible() {
+    return !this.#commentManager && this.#container.hidden === false;
+  }
+}
+class FreeTextAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+    this.textContent = parameters.data.textContent;
+    this.textPosition = parameters.data.textPosition;
+    this.annotationEditorType = AnnotationEditorType.FREETEXT;
+  }
+  render() {
+    this.container.classList.add("freeTextAnnotation");
+    if (this.textContent) {
+      const content = this.contentElement = document.createElement("div");
+      content.classList.add("annotationTextContent");
+      content.setAttribute("role", "comment");
+      for (const line of this.textContent) {
+        const lineSpan = document.createElement("span");
+        lineSpan.textContent = line;
+        content.append(lineSpan);
+      }
+      this.container.append(content);
+    }
+    if (!this.data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    this._editOnDoubleClick();
+    return this.container;
+  }
+}
+class LineAnnotationElement extends AnnotationElement {
+  #line = null;
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+  }
+  render() {
+    this.container.classList.add("lineAnnotation");
+    const {
+      data,
+      width,
+      height
+    } = this;
+    const svg = this.svgFactory.create(width, height, true);
+    const line = this.#line = this.svgFactory.createElement("svg:line");
+    line.setAttribute("x1", data.rect[2] - data.lineCoordinates[0]);
+    line.setAttribute("y1", data.rect[3] - data.lineCoordinates[1]);
+    line.setAttribute("x2", data.rect[2] - data.lineCoordinates[2]);
+    line.setAttribute("y2", data.rect[3] - data.lineCoordinates[3]);
+    line.setAttribute("stroke-width", data.borderStyle.width || 1);
+    line.setAttribute("stroke", "transparent");
+    line.setAttribute("fill", "transparent");
+    svg.append(line);
+    this.container.append(svg);
+    if (!data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    return this.container;
+  }
+  getElementsToTriggerPopup() {
+    return this.#line;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
+}
+class SquareAnnotationElement extends AnnotationElement {
+  #square = null;
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+  }
+  render() {
+    this.container.classList.add("squareAnnotation");
+    const {
+      data,
+      width,
+      height
+    } = this;
+    const svg = this.svgFactory.create(width, height, true);
+    const borderWidth = data.borderStyle.width;
+    const square = this.#square = this.svgFactory.createElement("svg:rect");
+    square.setAttribute("x", borderWidth / 2);
+    square.setAttribute("y", borderWidth / 2);
+    square.setAttribute("width", width - borderWidth);
+    square.setAttribute("height", height - borderWidth);
+    square.setAttribute("stroke-width", borderWidth || 1);
+    square.setAttribute("stroke", "transparent");
+    square.setAttribute("fill", "transparent");
+    svg.append(square);
+    this.container.append(svg);
+    if (!data.popupRef && this.hasPopupData) {
+      this.hasOwnCommentButton = true;
+      this._createPopup();
+    }
+    return this.container;
+  }
+  getElementsToTriggerPopup() {
+    return this.#square;

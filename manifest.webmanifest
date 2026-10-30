@@ -1,0 +1,19 @@
+{
+  "name": "RaceLab 競馬・競輪 展開シミュレーター",
+  "short_name": "RaceLab",
+  "lang": "ja",
+  "description": "競馬・競輪の参考展開シミュレーション。PDFは端末内で処理します。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0c101b",
+  "theme_color": "#0c101b",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

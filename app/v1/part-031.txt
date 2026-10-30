@@ -1,0 +1,1000 @@
+    if (this._clipPathId && this.#internalDiv) {
+      this.#internalDiv.style.clipPath = this._clipPathId;
+    }
+  }
+  #convertToParentSpace([x, y, width, height]) {
+    const {
+      parentDimensions: [pW, pH],
+      _drawRotation: rotation
+    } = this;
+    switch (rotation) {
+      case 90:
+        return [y, 1 - x, width * (pH / pW), height * (pW / pH)];
+      case 180:
+        return [1 - x, 1 - y, width, height];
+      case 270:
+        return [1 - y, x, width * (pH / pW), height * (pW / pH)];
+      default:
+        return [x, y, width, height];
+    }
+  }
+  #convertToDrawSpace() {
+    const {
+      x,
+      y,
+      width,
+      height,
+      parentDimensions: [pW, pH],
+      _drawRotation: rotation
+    } = this;
+    switch (rotation) {
+      case 90:
+        return [1 - y, x, width * (pW / pH), height * (pH / pW)];
+      case 180:
+        return [1 - x, 1 - y, width, height];
+      case 270:
+        return [y, 1 - x, width * (pW / pH), height * (pH / pW)];
+      default:
+        return [x, y, width, height];
+    }
+  }
+  #updateBbox(bbox) {
+    [this.x, this.y, this.width, this.height] = this.#convertToParentSpace(bbox);
+    if (this.div) {
+      this.fixAndSetPosition();
+      this.setDims();
+    }
+    this._onResized();
+  }
+  #rotateBox(parentRotation = this.parentRotation) {
+    const {
+      x,
+      y,
+      width,
+      height,
+      _drawRotation: rotation,
+      parentDimensions: [pW, pH]
+    } = this;
+    switch ((rotation * 4 + parentRotation) / 90) {
+      case 1:
+        return [1 - y - height, x, height, width];
+      case 2:
+        return [1 - x - width, 1 - y - height, width, height];
+      case 3:
+        return [y, 1 - x - width, height, width];
+      case 4:
+        return [x, y - width * (pW / pH), height * (pH / pW), width * (pW / pH)];
+      case 5:
+        return [1 - y, x, width * (pW / pH), height * (pH / pW)];
+      case 6:
+        return [1 - x - height * (pH / pW), 1 - y, height * (pH / pW), width * (pW / pH)];
+      case 7:
+        return [y - width * (pW / pH), 1 - x - height * (pH / pW), width * (pW / pH), height * (pH / pW)];
+      case 8:
+        return [x - width, y - height, width, height];
+      case 9:
+        return [1 - y, x - width, height, width];
+      case 10:
+        return [1 - x, 1 - y, width, height];
+      case 11:
+        return [y - height, 1 - x, height, width];
+      case 12:
+        return [x - height * (pH / pW), y, height * (pH / pW), width * (pW / pH)];
+      case 13:
+        return [1 - y - width * (pW / pH), x - height * (pH / pW), width * (pW / pH), height * (pH / pW)];
+      case 14:
+        return [1 - x, 1 - y - width * (pW / pH), height * (pH / pW), width * (pW / pH)];
+      case 15:
+        return [y, 1 - x, width * (pW / pH), height * (pH / pW)];
+      default:
+        return [x, y, width, height];
+    }
+  }
+  rotate(parentRotation = this.parentRotation) {
+    if (!this.parent || this._drawId === null) {
+      return;
+    }
+    const angle = (parentRotation - this._drawRotation + 360) % 360;
+    this.parent.drawLayer.updateProperties(this._drawId, DrawingEditor._mergeSVGProperties({
+      bbox: this.#rotateBox(parentRotation)
+    }, this._drawOutlines.updateRotation(angle)));
+    this.#updateFocusOutline(angle);
+  }
+  show(visible = this._isVisible) {
+    super.show(visible);
+    this.#updateVisibility();
+  }
+  select() {
+    super.select();
+    this.#toggleFocusOutlineClass({
+      hovered: false,
+      selected: true
+    });
+  }
+  unselect() {
+    super.unselect();
+    this.#toggleFocusOutlineClass({
+      selected: false
+    });
+  }
+  pointerover() {
+    if (!this.isSelected) {
+      this.#toggleFocusOutlineClass({
+        hovered: true
+      });
+    }
+  }
+  pointerleave() {
+    if (!this.isSelected) {
+      this.#toggleFocusOutlineClass({
+        hovered: false
+      });
+    }
+  }
+  onScaleChanging() {
+    if (!this.parent) {
+      return;
+    }
+    const bbox = this._drawOutlines.updateParentDimensions(this.parentDimensions, this.parent.scale);
+    if (bbox) {
+      this.#updateBbox(bbox);
+    }
+  }
+  static onScaleChangingWhenDrawing() {}
+  render() {
+    if (this.div) {
+      return this.div;
+    }
+    let baseX, baseY;
+    if (this._isCopy) {
+      baseX = this.x;
+      baseY = this.y;
+    }
+    const div = super.render();
+    if (this.constructor._hasDrawClass) {
+      div.classList.add("draw");
+    }
+    const drawDiv = this.#internalDiv = document.createElement("div");
+    div.append(drawDiv);
+    drawDiv.setAttribute("aria-hidden", "true");
+    drawDiv.className = "internal";
+    if (this._clipPathId) {
+      drawDiv.style.clipPath = this._clipPathId;
+    }
+    bindEvents(this, drawDiv, ["pointerover", "pointerleave"]);
+    this.setDims();
+    this._uiManager.addShouldRescale(this);
+    this.disableEditing();
+    if (this._isCopy) {
+      this._moveAfterPaste(baseX, baseY);
+    }
+    return div;
+  }
+  static createDrawerInstance(_params) {
+    unreachable("Not implemented");
+  }
+  static _getDrawingTarget(_parent, {
+    target
+  }) {
+    return target;
+  }
+  static _getPointerCoords({
+    offsetX,
+    offsetY,
+    clientX,
+    clientY
+  }, referenceEvent = null) {
+    if (!referenceEvent) {
+      return [offsetX, offsetY];
+    }
+    let deltaX = clientX - referenceEvent.clientX;
+    let deltaY = clientY - referenceEvent.clientY;
+    switch (this._currentParent.viewport.rotation) {
+      case 90:
+        [deltaX, deltaY] = [deltaY, -deltaX];
+        break;
+      case 180:
+        [deltaX, deltaY] = [-deltaX, -deltaY];
+        break;
+      case 270:
+        [deltaX, deltaY] = [-deltaY, deltaX];
+        break;
+    }
+    return [referenceEvent.offsetX + deltaX, referenceEvent.offsetY + deltaY];
+  }
+  static _addDrawingListeners(_target, _signal) {}
+  static _endDrawingSession(isAborted = false) {
+    return this._currentParent.endDrawingSession(isAborted);
+  }
+  static startDrawing(parent, uiManager, isLTR, event) {
+    const {
+      pointerId,
+      pointerType
+    } = event;
+    if (CurrentPointers.isInitializedAndDifferentPointerType(pointerType)) {
+      return;
+    }
+    const target = this._getDrawingTarget(parent, event);
+    const [x, y] = this._getPointerCoords(event);
+    const {
+      viewport: {
+        rotation
+      }
+    } = parent;
+    const {
+      x: boxX,
+      y: boxY,
+      width: parentWidth,
+      height: parentHeight
+    } = target.getBoundingClientRect();
+    const ac = DrawingEditor.#currentDrawingAC = new AbortController();
+    const signal = parent.combinedSignal(ac);
+    CurrentPointers.setPointer(pointerType, pointerId);
+    window.addEventListener("pointerup", e => {
+      if (CurrentPointers.isSamePointerIdOrRemove(e.pointerId)) {
+        this._endDraw(e);
+      }
+    }, {
+      signal
+    });
+    window.addEventListener("pointercancel", e => {
+      if (CurrentPointers.isSamePointerIdOrRemove(e.pointerId)) {
+        this._endDrawingSession();
+      }
+    }, {
+      signal
+    });
+    window.addEventListener("pointerdown", e => {
+      if (!CurrentPointers.isSamePointerType(e.pointerType)) {
+        return;
+      }
+      CurrentPointers.initializeAndAddPointerId(e.pointerId);
+      if (DrawingEditor.#currentDraw.isCancellable()) {
+        DrawingEditor.#currentDraw.removeLastElement();
+        if (DrawingEditor.#currentDraw.isEmpty()) {
+          this._endDrawingSession(true);
+        } else {
+          this._endDraw(null);
+        }
+      }
+    }, {
+      capture: true,
+      passive: false,
+      signal
+    });
+    window.addEventListener("contextmenu", noContextMenu, {
+      signal
+    });
+    target.addEventListener("pointermove", this._drawMove.bind(this), {
+      signal
+    });
+    target.addEventListener("touchmove", e => {
+      if (CurrentPointers.isSameTimeStamp(e.timeStamp)) {
+        stopEvent(e);
+      }
+    }, {
+      signal
+    });
+    this._addDrawingListeners(target, signal);
+    parent.toggleDrawing();
+    uiManager._editorUndoBar?.hide();
+    if (DrawingEditor.#currentDraw) {
+      parent.drawLayer.updateProperties(this._currentDrawId, DrawingEditor.#currentDraw.startNew(x, y, parentWidth, parentHeight, rotation));
+      return;
+    }
+    uiManager.updateUIForDefaultProperties(this);
+    DrawingEditor.#currentDraw = this.createDrawerInstance({
+      x,
+      y,
+      box: [boxX, boxY, parentWidth, parentHeight],
+      rotation,
+      parent,
+      isLTR
+    });
+    DrawingEditor.#currentDrawingOptions = this.getDefaultDrawingOptions();
+    this._currentParent = parent;
+    const {
+      id,
+      clipPathId
+    } = parent.drawLayer.draw(this._mergeSVGProperties(DrawingEditor.#currentDrawingOptions.toSVGProperties(), DrawingEditor.#currentDraw.defaultSVGProperties), true, this._hasClipPath);
+    this._currentDrawId = id;
+    DrawingEditor.#currentClipPathId = this._hasClipPath ? clipPathId : null;
+  }
+  static _drawMove(event) {
+    CurrentPointers.isSameTimeStamp(event.timeStamp);
+    if (!DrawingEditor.#currentDraw || !CurrentPointers.isSamePointerId(event.pointerId)) {
+      return;
+    }
+    if (CurrentPointers.isUsingMultiplePointers()) {
+      this._endDraw(event);
+      return;
+    }
+    let properties;
+    const coalesced = event.getCoalescedEvents?.();
+    if (coalesced?.length) {
+      const points = [];
+      for (const sample of coalesced) {
+        points.push(...this._getPointerCoords(sample, event));
+      }
+      properties = DrawingEditor.#currentDraw.addPoints(points);
+    } else {
+      properties = DrawingEditor.#currentDraw.add(...this._getPointerCoords(event));
+    }
+    this._currentParent.drawLayer.updateProperties(this._currentDrawId, properties);
+    CurrentPointers.setTimeStamp(event.timeStamp);
+    stopEvent(event);
+  }
+  static _cleanup(all) {
+    if (all) {
+      this._currentDrawId = -1;
+      this._currentParent = null;
+      DrawingEditor.#currentDraw = null;
+      DrawingEditor.#currentDrawingOptions = null;
+      DrawingEditor.#currentClipPathId = null;
+      CurrentPointers.clearTimeStamp();
+    }
+    if (DrawingEditor.#currentDrawingAC) {
+      DrawingEditor.#currentDrawingAC.abort();
+      DrawingEditor.#currentDrawingAC = null;
+      CurrentPointers.clearPointerIds();
+    }
+  }
+  static _endDraw(event) {
+    const parent = this._currentParent;
+    if (!parent) {
+      return;
+    }
+    parent.toggleDrawing(true);
+    this._cleanup(false);
+    parent.drawLayer.updateProperties(this._currentDrawId, event?.target === parent.div ? DrawingEditor.#currentDraw.end(...this._getPointerCoords(event)) : DrawingEditor.#currentDraw.end());
+    if (this.supportMultipleDrawings) {
+      const draw = DrawingEditor.#currentDraw;
+      const drawId = this._currentDrawId;
+      const lastElement = draw.getLastElement();
+      parent.addCommands({
+        cmd: () => {
+          parent.drawLayer.updateProperties(drawId, draw.setLastElement(lastElement));
+        },
+        undo: () => {
+          parent.drawLayer.updateProperties(drawId, draw.removeLastElement());
+        },
+        mustExec: false,
+        type: AnnotationEditorParamsType.DRAW_STEP
+      });
+      return;
+    }
+    this.endDrawing(false);
+  }
+  static endDrawing(isAborted) {
+    const parent = this._currentParent;
+    if (!parent) {
+      return null;
+    }
+    parent.toggleDrawing(true);
+    parent.cleanUndoStack(AnnotationEditorParamsType.DRAW_STEP);
+    if (!DrawingEditor.#currentDraw.isEmpty()) {
+      const {
+        pageDimensions: [pageWidth, pageHeight],
+        scale
+      } = parent;
+      const editor = parent.createAndAddNewEditor({
+        offsetX: 0,
+        offsetY: 0
+      }, false, {
+        drawId: this._currentDrawId,
+        clipPathId: DrawingEditor.#currentClipPathId,
+        drawOutlines: DrawingEditor.#currentDraw.getOutlines(pageWidth * scale, pageHeight * scale, scale, this._INNER_MARGIN),
+        drawingOptions: DrawingEditor.#currentDrawingOptions,
+        mustBeCommitted: !isAborted
+      });
+      this._cleanup(true);
+      return editor;
+    }
+    parent.drawLayer.remove(this._currentDrawId);
+    this._cleanup(true);
+    return null;
+  }
+  createDrawingOptions(_data) {}
+  static deserializeDraw(_pageX, _pageY, _pageWidth, _pageHeight, _innerMargin, _data, _uiManager) {
+    unreachable("Not implemented");
+  }
+  static async deserialize(data, parent, uiManager) {
+    const {
+      rawDims: {
+        pageWidth,
+        pageHeight,
+        pageX,
+        pageY
+      }
+    } = parent.viewport;
+    const drawOutlines = this.deserializeDraw(pageX, pageY, pageWidth, pageHeight, this._INNER_MARGIN, data, uiManager);
+    const editor = await super.deserialize(data, parent, uiManager);
+    editor.createDrawingOptions(data);
+    editor.#createDrawOutlines({
+      drawOutlines
+    });
+    editor.#addToDrawLayer();
+    editor.onScaleChanging();
+    editor.rotate();
+    return editor;
+  }
+  serializeDraw(isForCopying) {
+    const [pageX, pageY] = this.pageTranslation;
+    const [pageWidth, pageHeight] = this.pageDimensions;
+    return this._drawOutlines.serialize([pageX, pageY, pageWidth, pageHeight], isForCopying);
+  }
+  renderAnnotationElement(annotation) {
+    annotation.updateEdited({
+      rect: this.getPDFRect()
+    });
+    return null;
+  }
+  static canCreateNewEmptyEditor() {
+    return false;
+  }
+}
+
+;// ./src/display/editor/drawers/outline.js
+
+
+class Outline {
+  static PRECISION = 1e-4;
+  focusOutline = null;
+  toSVGPath() {
+    unreachable("Abstract method `toSVGPath` must be implemented.");
+  }
+  get box() {
+    unreachable("Abstract getter `box` must be implemented.");
+  }
+  serialize(_bbox, _rotation) {
+    unreachable("Abstract method `serialize` must be implemented.");
+  }
+  get defaultSVGProperties() {
+    unreachable("Abstract getter `defaultSVGProperties` must be implemented.");
+  }
+  get defaultProperties() {
+    return this.defaultSVGProperties;
+  }
+  getFocusSVGProperties(_rotation) {
+    return null;
+  }
+  get focusMustRemoveSelfIntersections() {
+    return false;
+  }
+  updateProperty(_name, _value) {
+    return null;
+  }
+  updateParentDimensions(_dimensions, _scale) {
+    return null;
+  }
+  serializeQuadPoints(_pageTranslation, _pageDimensions) {
+    return null;
+  }
+  updateRotation(_rotation) {
+    return {};
+  }
+  getPathResizingSVGProperties(_bbox) {
+    return {};
+  }
+  getPathResizedSVGProperties(_bbox) {
+    return {};
+  }
+  getPathTranslatedSVGProperties(_bbox, _parentDimensions) {
+    return {};
+  }
+  static _rotateBox([x, y, width, height], angle) {
+    switch (angle) {
+      case 90:
+        return [1 - y - height, x, height, width];
+      case 180:
+        return [1 - x - width, 1 - y - height, width, height];
+      case 270:
+        return [y, 1 - x - width, height, width];
+    }
+    return [x, y, width, height];
+  }
+  static _rescale(src, tx, ty, sx, sy, dest) {
+    dest ||= new Float32Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i] * sx;
+      dest[i + 1] = ty + src[i + 1] * sy;
+    }
+    return dest;
+  }
+  static _rescaleAndSwap(src, tx, ty, sx, sy, dest) {
+    dest ||= new Float32Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i + 1] * sx;
+      dest[i + 1] = ty + src[i] * sy;
+    }
+    return dest;
+  }
+  static _translate(src, tx, ty, dest) {
+    dest ||= new Float32Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i];
+      dest[i + 1] = ty + src[i + 1];
+    }
+    return dest;
+  }
+  static svgRound(x) {
+    return Math.round(x * 10000);
+  }
+  static _normalizePoint(x, y, parentWidth, parentHeight, rotation) {
+    switch (rotation) {
+      case 90:
+        return [1 - y / parentWidth, x / parentHeight];
+      case 180:
+        return [1 - x / parentWidth, 1 - y / parentHeight];
+      case 270:
+        return [y / parentWidth, 1 - x / parentHeight];
+      default:
+        return [x / parentWidth, y / parentHeight];
+    }
+  }
+  static createBezierPoints(x1, y1, x2, y2, x3, y3) {
+    return [(x1 + 5 * x2) / 6, (y1 + 5 * y2) / 6, (5 * x2 + x3) / 6, (5 * y2 + y3) / 6, (x2 + x3) / 2, (y2 + y3) / 2];
+  }
+}
+
+;// ./src/display/editor/drawers/freedraw.js
+
+
+
+
+class FreeDrawOutliner {
+  #box;
+  #bottom = [];
+  #innerMargin;
+  #isLTR;
+  #top = [];
+  #last = new Float32Array(18);
+  #lastX;
+  #lastY;
+  #min;
+  #min_dist;
+  #scaleFactor;
+  #thickness;
+  #points = [];
+  static #MIN_DIST = 8;
+  static #MIN_DIFF = 2;
+  static #MIN = FreeDrawOutliner.#MIN_DIST + FreeDrawOutliner.#MIN_DIFF;
+  constructor(x, y, box, scaleFactor, thickness, isLTR, innerMargin = 0) {
+    this.#box = box;
+    this.#thickness = thickness * scaleFactor;
+    this.#isLTR = isLTR;
+    this.#last.set([NaN, NaN, NaN, NaN, x, y], 6);
+    this.#innerMargin = innerMargin;
+    this.#min_dist = FreeDrawOutliner.#MIN_DIST * scaleFactor;
+    this.#min = FreeDrawOutliner.#MIN * scaleFactor;
+    this.#scaleFactor = scaleFactor;
+    this.#points.push(x, y);
+  }
+  isEmpty() {
+    return isNaN(this.#last[8]);
+  }
+  isCancellable() {
+    return this.#points.length <= 10;
+  }
+  removeLastElement() {
+    this.#last.fill(NaN);
+    this.#top.length = this.#bottom.length = this.#points.length = 0;
+    return {
+      path: {
+        d: ""
+      }
+    };
+  }
+  #getLastCoords() {
+    const lastTop = this.#last.subarray(4, 6);
+    const lastBottom = this.#last.subarray(16, 18);
+    const [x, y, width, height] = this.#box;
+    return [(this.#lastX + (lastTop[0] - lastBottom[0]) / 2 - x) / width, (this.#lastY + (lastTop[1] - lastBottom[1]) / 2 - y) / height, (this.#lastX + (lastBottom[0] - lastTop[0]) / 2 - x) / width, (this.#lastY + (lastBottom[1] - lastTop[1]) / 2 - y) / height];
+  }
+  add(x, y) {
+    this.#lastX = x;
+    this.#lastY = y;
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    let [x1, y1, x2, y2] = this.#last.subarray(8, 12);
+    const diffX = x - x2;
+    const diffY = y - y2;
+    const d = Math.hypot(diffX, diffY);
+    if (d < this.#min) {
+      return false;
+    }
+    const diffD = d - this.#min_dist;
+    const K = diffD / d;
+    const shiftX = K * diffX;
+    const shiftY = K * diffY;
+    let x0 = x1;
+    let y0 = y1;
+    x1 = x2;
+    y1 = y2;
+    x2 += shiftX;
+    y2 += shiftY;
+    this.#points?.push(x, y);
+    const nX = -shiftY / diffD;
+    const nY = shiftX / diffD;
+    const thX = nX * this.#thickness;
+    const thY = nY * this.#thickness;
+    this.#last.set(this.#last.subarray(2, 8), 0);
+    this.#last.set([x2 + thX, y2 + thY], 4);
+    this.#last.set(this.#last.subarray(14, 18), 12);
+    this.#last.set([x2 - thX, y2 - thY], 16);
+    if (isNaN(this.#last[6])) {
+      if (this.#top.length === 0) {
+        this.#last.set([x1 + thX, y1 + thY], 2);
+        this.#top.push(NaN, NaN, NaN, NaN, (x1 + thX - layerX) / layerWidth, (y1 + thY - layerY) / layerHeight);
+        this.#last.set([x1 - thX, y1 - thY], 14);
+        this.#bottom.push(NaN, NaN, NaN, NaN, (x1 - thX - layerX) / layerWidth, (y1 - thY - layerY) / layerHeight);
+      }
+      this.#last.set([x0, y0, x1, y1, x2, y2], 6);
+      return !this.isEmpty();
+    }
+    this.#last.set([x0, y0, x1, y1, x2, y2], 6);
+    const angle = Math.abs(Math.atan2(y0 - y1, x0 - x1) - Math.atan2(shiftY, shiftX));
+    if (angle < Math.PI / 2) {
+      [x1, y1, x2, y2] = this.#last.subarray(2, 6);
+      this.#top.push(NaN, NaN, NaN, NaN, ((x1 + x2) / 2 - layerX) / layerWidth, ((y1 + y2) / 2 - layerY) / layerHeight);
+      [x1, y1, x0, y0] = this.#last.subarray(14, 18);
+      this.#bottom.push(NaN, NaN, NaN, NaN, ((x0 + x1) / 2 - layerX) / layerWidth, ((y0 + y1) / 2 - layerY) / layerHeight);
+      return true;
+    }
+    [x0, y0, x1, y1, x2, y2] = this.#last.subarray(0, 6);
+    this.#top.push(((x0 + 5 * x1) / 6 - layerX) / layerWidth, ((y0 + 5 * y1) / 6 - layerY) / layerHeight, ((5 * x1 + x2) / 6 - layerX) / layerWidth, ((5 * y1 + y2) / 6 - layerY) / layerHeight, ((x1 + x2) / 2 - layerX) / layerWidth, ((y1 + y2) / 2 - layerY) / layerHeight);
+    [x2, y2, x1, y1, x0, y0] = this.#last.subarray(12, 18);
+    this.#bottom.push(((x0 + 5 * x1) / 6 - layerX) / layerWidth, ((y0 + 5 * y1) / 6 - layerY) / layerHeight, ((5 * x1 + x2) / 6 - layerX) / layerWidth, ((5 * y1 + y2) / 6 - layerY) / layerHeight, ((x1 + x2) / 2 - layerX) / layerWidth, ((y1 + y2) / 2 - layerY) / layerHeight);
+    return true;
+  }
+  toSVGPath() {
+    if (this.isEmpty()) {
+      return "";
+    }
+    const top = this.#top;
+    const bottom = this.#bottom;
+    if (isNaN(this.#last[6]) && !this.isEmpty()) {
+      return this.#toSVGPathTwoPoints();
+    }
+    const buffer = [];
+    buffer.push(`M${top[4]} ${top[5]}`);
+    for (let i = 6; i < top.length; i += 6) {
+      if (isNaN(top[i])) {
+        buffer.push(`L${top[i + 4]} ${top[i + 5]}`);
+      } else {
+        buffer.push(`C${top[i]} ${top[i + 1]} ${top[i + 2]} ${top[i + 3]} ${top[i + 4]} ${top[i + 5]}`);
+      }
+    }
+    this.#toSVGPathEnd(buffer);
+    for (let i = bottom.length - 6; i >= 6; i -= 6) {
+      if (isNaN(bottom[i])) {
+        buffer.push(`L${bottom[i + 4]} ${bottom[i + 5]}`);
+      } else {
+        buffer.push(`C${bottom[i]} ${bottom[i + 1]} ${bottom[i + 2]} ${bottom[i + 3]} ${bottom[i + 4]} ${bottom[i + 5]}`);
+      }
+    }
+    this.#toSVGPathStart(buffer);
+    return buffer.join(" ");
+  }
+  #toSVGPathTwoPoints() {
+    const [x, y, width, height] = this.#box;
+    const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
+    return `M${(this.#last[2] - x) / width} ${(this.#last[3] - y) / height} L${(this.#last[4] - x) / width} ${(this.#last[5] - y) / height} L${lastTopX} ${lastTopY} L${lastBottomX} ${lastBottomY} L${(this.#last[16] - x) / width} ${(this.#last[17] - y) / height} L${(this.#last[14] - x) / width} ${(this.#last[15] - y) / height} Z`;
+  }
+  #toSVGPathStart(buffer) {
+    const bottom = this.#bottom;
+    buffer.push(`L${bottom[4]} ${bottom[5]} Z`);
+  }
+  #toSVGPathEnd(buffer) {
+    const [x, y, width, height] = this.#box;
+    const lastTop = this.#last.subarray(4, 6);
+    const lastBottom = this.#last.subarray(16, 18);
+    const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
+    buffer.push(`L${(lastTop[0] - x) / width} ${(lastTop[1] - y) / height} L${lastTopX} ${lastTopY} L${lastBottomX} ${lastBottomY} L${(lastBottom[0] - x) / width} ${(lastBottom[1] - y) / height}`);
+  }
+  newFreeDrawOutline(outline, points, box, scaleFactor, innerMargin, isLTR) {
+    return new FreeDrawOutline(outline, points, box, scaleFactor, innerMargin, isLTR);
+  }
+  getOutlines() {
+    const top = this.#top;
+    const bottom = this.#bottom;
+    const last = this.#last;
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    const points = new Float32Array((this.#points?.length ?? 0) + 2);
+    for (let i = 0, ii = points.length - 2; i < ii; i += 2) {
+      points[i] = (this.#points[i] - layerX) / layerWidth;
+      points[i + 1] = (this.#points[i + 1] - layerY) / layerHeight;
+    }
+    points[points.length - 2] = (this.#lastX - layerX) / layerWidth;
+    points[points.length - 1] = (this.#lastY - layerY) / layerHeight;
+    if (isNaN(last[6]) && !this.isEmpty()) {
+      return this.#getOutlineTwoPoints(points);
+    }
+    const outline = new Float32Array(this.#top.length + 24 + this.#bottom.length);
+    let N = top.length;
+    for (let i = 0; i < N; i += 2) {
+      if (isNaN(top[i])) {
+        outline[i] = outline[i + 1] = NaN;
+        continue;
+      }
+      outline[i] = top[i];
+      outline[i + 1] = top[i + 1];
+    }
+    N = this.#getOutlineEnd(outline, N);
+    for (let i = bottom.length - 6; i >= 6; i -= 6) {
+      for (let j = 0; j < 6; j += 2) {
+        if (isNaN(bottom[i + j])) {
+          outline[N] = outline[N + 1] = NaN;
+          N += 2;
+          continue;
+        }
+        outline[N] = bottom[i + j];
+        outline[N + 1] = bottom[i + j + 1];
+        N += 2;
+      }
+    }
+    this.#getOutlineStart(outline, N);
+    return this.newFreeDrawOutline(outline, points, this.#box, this.#scaleFactor, this.#innerMargin, this.#isLTR);
+  }
+  #getOutlineTwoPoints(points) {
+    const last = this.#last;
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
+    const outline = new Float32Array(36);
+    outline.set([NaN, NaN, NaN, NaN, (last[2] - layerX) / layerWidth, (last[3] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[4] - layerX) / layerWidth, (last[5] - layerY) / layerHeight, NaN, NaN, NaN, NaN, lastTopX, lastTopY, NaN, NaN, NaN, NaN, lastBottomX, lastBottomY, NaN, NaN, NaN, NaN, (last[16] - layerX) / layerWidth, (last[17] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[14] - layerX) / layerWidth, (last[15] - layerY) / layerHeight], 0);
+    return this.newFreeDrawOutline(outline, points, this.#box, this.#scaleFactor, this.#innerMargin, this.#isLTR);
+  }
+  #getOutlineStart(outline, pos) {
+    const bottom = this.#bottom;
+    outline.set([NaN, NaN, NaN, NaN, bottom[4], bottom[5]], pos);
+    return pos += 6;
+  }
+  #getOutlineEnd(outline, pos) {
+    const lastTop = this.#last.subarray(4, 6);
+    const lastBottom = this.#last.subarray(16, 18);
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
+    outline.set([NaN, NaN, NaN, NaN, (lastTop[0] - layerX) / layerWidth, (lastTop[1] - layerY) / layerHeight, NaN, NaN, NaN, NaN, lastTopX, lastTopY, NaN, NaN, NaN, NaN, lastBottomX, lastBottomY, NaN, NaN, NaN, NaN, (lastBottom[0] - layerX) / layerWidth, (lastBottom[1] - layerY) / layerHeight], pos);
+    return pos += 24;
+  }
+}
+class FreeDrawOutline extends Outline {
+  #box;
+  #bbox = new Float32Array(4);
+  #innerMargin;
+  #isLTR;
+  #points;
+  #scaleFactor;
+  #outline;
+  constructor(outline, points, box, scaleFactor, innerMargin, isLTR) {
+    super();
+    this.#outline = outline;
+    this.#points = points;
+    this.#box = box;
+    this.#scaleFactor = scaleFactor;
+    this.#innerMargin = innerMargin;
+    this.#isLTR = isLTR;
+    this.firstPoint = [NaN, NaN];
+    this.lastPoint = [NaN, NaN];
+    this.#computeMinMax(isLTR);
+    const [x, y, width, height] = this.#bbox;
+    for (let i = 0, ii = outline.length; i < ii; i += 2) {
+      outline[i] = (outline[i] - x) / width;
+      outline[i + 1] = (outline[i + 1] - y) / height;
+    }
+    for (let i = 0, ii = points.length; i < ii; i += 2) {
+      points[i] = (points[i] - x) / width;
+      points[i + 1] = (points[i + 1] - y) / height;
+    }
+  }
+  toSVGPath() {
+    const buffer = [`M${this.#outline[4]} ${this.#outline[5]}`];
+    for (let i = 6, ii = this.#outline.length; i < ii; i += 6) {
+      if (isNaN(this.#outline[i])) {
+        buffer.push(`L${this.#outline[i + 4]} ${this.#outline[i + 5]}`);
+        continue;
+      }
+      buffer.push(`C${this.#outline[i]} ${this.#outline[i + 1]} ${this.#outline[i + 2]} ${this.#outline[i + 3]} ${this.#outline[i + 4]} ${this.#outline[i + 5]}`);
+    }
+    buffer.push("Z");
+    return buffer.join(" ");
+  }
+  serialize([blX, blY, trX, trY], rotation) {
+    const width = trX - blX;
+    const height = trY - blY;
+    let outline;
+    let points;
+    switch (rotation) {
+      case 0:
+        outline = Outline._rescale(this.#outline, blX, trY, width, -height);
+        points = Outline._rescale(this.#points, blX, trY, width, -height);
+        break;
+      case 90:
+        outline = Outline._rescaleAndSwap(this.#outline, blX, blY, width, height);
+        points = Outline._rescaleAndSwap(this.#points, blX, blY, width, height);
+        break;
+      case 180:
+        outline = Outline._rescale(this.#outline, trX, blY, -width, height);
+        points = Outline._rescale(this.#points, trX, blY, -width, height);
+        break;
+      case 270:
+        outline = Outline._rescaleAndSwap(this.#outline, trX, trY, -width, -height);
+        points = Outline._rescaleAndSwap(this.#points, trX, trY, -width, -height);
+        break;
+    }
+    return {
+      outline: Array.from(outline),
+      points: [Array.from(points)]
+    };
+  }
+  #computeMinMax(isLTR) {
+    const outline = this.#outline;
+    let lastX = outline[4];
+    let lastY = outline[5];
+    const minMax = [lastX, lastY, lastX, lastY];
+    let firstPointX = lastX;
+    let firstPointY = lastY;
+    let lastPointX = lastX;
+    let lastPointY = lastY;
+    const ltrCallback = isLTR ? Math.max : Math.min;
+    const bezierBbox = new Float32Array(4);
+    for (let i = 6, ii = outline.length; i < ii; i += 6) {
+      const x = outline[i + 4],
+        y = outline[i + 5];
+      if (isNaN(outline[i])) {
+        Util.pointBoundingBox(x, y, minMax);
+        if (firstPointY > y) {
+          firstPointX = x;
+          firstPointY = y;
+        } else if (firstPointY === y) {
+          firstPointX = ltrCallback(firstPointX, x);
+        }
+        if (lastPointY < y) {
+          lastPointX = x;
+          lastPointY = y;
+        } else if (lastPointY === y) {
+          lastPointX = ltrCallback(lastPointX, x);
+        }
+      } else {
+        bezierBbox.set(BBOX_INIT, 0);
+        Util.bezierBoundingBox(lastX, lastY, ...outline.slice(i, i + 6), bezierBbox);
+        Util.rectBoundingBox(...bezierBbox, minMax);
+        if (firstPointY > bezierBbox[1]) {
+          firstPointX = bezierBbox[0];
+          firstPointY = bezierBbox[1];
+        } else if (firstPointY === bezierBbox[1]) {
+          firstPointX = ltrCallback(firstPointX, bezierBbox[0]);
+        }
+        if (lastPointY < bezierBbox[3]) {
+          lastPointX = bezierBbox[2];
+          lastPointY = bezierBbox[3];
+        } else if (lastPointY === bezierBbox[3]) {
+          lastPointX = ltrCallback(lastPointX, bezierBbox[2]);
+        }
+      }
+      lastX = x;
+      lastY = y;
+    }
+    const bbox = this.#bbox;
+    bbox[0] = minMax[0] - this.#innerMargin;
+    bbox[1] = minMax[1] - this.#innerMargin;
+    bbox[2] = minMax[2] - minMax[0] + 2 * this.#innerMargin;
+    bbox[3] = minMax[3] - minMax[1] + 2 * this.#innerMargin;
+    this.firstPoint = [firstPointX, firstPointY];
+    this.lastPoint = [lastPointX, lastPointY];
+  }
+  get box() {
+    return this.#bbox;
+  }
+  newOutliner(x, y, box, scaleFactor, thickness, isLTR, innerMargin = 0) {
+    return new FreeDrawOutliner(x, y, box, scaleFactor, thickness, isLTR, innerMargin);
+  }
+  updateThickness(thickness) {
+    const outline = this.getNewOutline(thickness);
+    this.#outline = outline.#outline;
+    this.#points = outline.#points;
+    this.#bbox.set(outline.#bbox);
+    this.firstPoint = outline.firstPoint;
+    this.lastPoint = outline.lastPoint;
+    return this.#bbox;
+  }
+  getNewOutline(thickness, innerMargin) {
+    const [x, y, width, height] = this.#bbox;
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    const sx = width * layerWidth;
+    const sy = height * layerHeight;
+    const tx = x * layerWidth + layerX;
+    const ty = y * layerHeight + layerY;
+    const points = this.#points;
+    const outliner = this.newOutliner(points[0] * sx + tx, points[1] * sy + ty, this.#box, this.#scaleFactor, thickness, this.#isLTR, innerMargin ?? this.#innerMargin);
+    for (let i = 2, ii = points.length; i < ii; i += 2) {
+      outliner.add(points[i] * sx + tx, points[i + 1] * sy + ty);
+    }
+    return outliner.getOutlines();
+  }
+}
+
+;// ./src/display/editor/drawers/highlight.js
+
+
+
+
+
+
+
+
+
+
+
+
+function getHighlightSVGProperties(outline) {
+  return {
+    bbox: outline.box,
+    root: {
+      viewBox: "0 0 1 1"
+    },
+    rootClass: {
+      highlight: true,
+      free: outline.isFree
+    },
+    path: {
+      d: outline.toSVGPath()
+    }
+  };
+}
+function getHighlightFocusSVGProperties(outline, rotation) {
+  const {
+    focusOutline
+  } = outline;
+  return {
+    bbox: Outline._rotateBox(focusOutline.box, rotation),
+    root: {
+      "data-main-rotation": rotation
+    },
+    rootClass: {
+      highlightOutline: true,
+      free: outline.isFree
+    },
+    path: {
+      d: focusOutline.toSVGPath()
+    }
+  };
+}
+class HighlightOutliner {
+  #box;
+  #firstPoint;
+  #lastPoint;
+  #verticalEdges = [];
+  #intervals = [];
+  constructor(boxes, borderWidth = 0, innerMargin = 0, isLTR = true) {
+    const minMax = BBOX_INIT.slice();
+    const NUMBER_OF_DIGITS = 4;
+    const EPSILON = 10 ** -NUMBER_OF_DIGITS;
+    for (const {
+      x,
+      y,
+      width,
+      height
+    } of boxes) {
+      const x1 = Math.floor((x - borderWidth) / EPSILON) * EPSILON;
+      const x2 = Math.ceil((x + width + borderWidth) / EPSILON) * EPSILON;
+      const y1 = Math.floor((y - borderWidth) / EPSILON) * EPSILON;
+      const y2 = Math.ceil((y + height + borderWidth) / EPSILON) * EPSILON;
+      const left = [x1, y1, y2, true];
+      const right = [x2, y1, y2, false];
+      this.#verticalEdges.push(left, right);
+      Util.rectBoundingBox(x1, y1, x2, y2, minMax);
+    }
+    const bboxWidth = minMax[2] - minMax[0] + 2 * innerMargin;
+    const bboxHeight = minMax[3] - minMax[1] + 2 * innerMargin;
+    const shiftedMinX = minMax[0] - innerMargin;
+    const shiftedMinY = minMax[1] - innerMargin;
+    let firstPointX = isLTR ? -Infinity : Infinity;
+    let firstPointY = Infinity;
+    const lastEdge = this.#verticalEdges.at(isLTR ? -1 : -2);
+    const lastPoint = [lastEdge[0], lastEdge[2]];
+    for (const edge of this.#verticalEdges) {
+      const [x, y1, y2, left] = edge;
+      if (!left && isLTR) {
+        if (y1 < firstPointY) {
+          firstPointY = y1;
+          firstPointX = x;
