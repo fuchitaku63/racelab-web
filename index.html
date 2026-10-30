@@ -3,13 +3,13 @@
 <body><h1>RaceLab を起動しています</h1><p id="status" role="status">安全にアプリを読み込んでいます…</p><progress id="bar" max="100" value="0"></progress><p>初回は約5MBのダウンロードが必要です。次回以降はオフラインでも利用できます（対応環境の場合）。</p>
 <script>
 (async()=>{
- const COUNT=38, PREFIX='./app/v1/part-', EXPECTED='ca5550c6e6fddeb8fccbfdc32a1dea755d0cca17a65d678820468330e0b10f9f';
+ const COUNT=38, PREFIX='./app/v1/part-', EXPECTED='433b3a4e9359c7a2e29bdcf6f424132330eaca150465f8477758001806ce2758';
  const message=document.getElementById('status'),bar=document.getElementById('bar');
  try {
   const chunks=new Array(COUNT);
   let finished=0;
   await Promise.all(Array.from({length:COUNT},async(_,i)=>{
-   const r=await fetch(PREFIX+String(i).padStart(3,'0')+'.txt',{cache:'default'});
+   const r=await fetch(PREFIX+String(i).padStart(3,'0')+'.txt?v=433b3a4e9359',{cache:'default'});
    if(!r.ok)throw Error('プログラムの一部を取得できませんでした（'+(i+1)+'/'+COUNT+'、HTTP '+r.status+'）');
    chunks[i]=await r.text();
    finished++;bar.value=finished/COUNT*85;message.textContent='アプリを準備しています… '+finished+'/'+COUNT;
