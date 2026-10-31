@@ -20,8 +20,8 @@ function report(rev='r3',n=9){
  for(let k=1;k<=n;k++)parts.push(k+'番 架空選手'+k+' 得点'+(90+k)+'.25｜B'+k+' S0 逃1 捲2 差3 マ0｜コメント: '+(k===2?'架空選手1さんへ':'自力。'));
  return parts.join('\n');
 }
-test('r1,r2,r3 iPhone short reports are accepted as editable source information',()=>{
- for(const ver of ['r1','r2','r3']){
+test('r1,r2,r3,r4 iPhone short reports are accepted as editable source information',()=>{
+ for(const ver of ['r1','r2','r3','r4']){
   const out=JSON.parse(convert(report(ver)));
   assert.equal(out.buildId,'iphone-easy-20261031-'+ver);
   assert.equal(out.version,'11.24-dom-verified-no-odds-strict');
