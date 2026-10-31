@@ -1,0 +1,26 @@
+name: RaceLab bookmarklet unit checks
+on:
+  push:
+    branches:
+      - fix/v1124-iphone-release
+  pull_request:
+    paths:
+      - 'bookmarklets/**'
+      - 'tests/**'
+      - '.github/workflows/bookmarklet-checks.yml'
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test all offline unit cases
+        run: node --test tests/*.test.cjs
+      - name: Validate bookmarklet and installer syntax
+        run: |
+          node --check bookmarklets/v1124_iphone.js
+          node --check bookmarklets/v1124_pc.js
+          node --test tests/v1124-region.test.cjs
