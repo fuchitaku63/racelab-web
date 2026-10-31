@@ -27,8 +27,11 @@ const getComments=(tables,entries=[])=>{
    // The lineup-order row is NOT a substitute: its order can be different.
    let carOrder=null;
    for(let p=i-1;p>=Math.max(0,i-5);p--){
-    const rr=t.rows[p].map(norm),digits=rr.filter(c=>/^[1-9]$/.test(c));
-    if(digits.length===cars.length&&new Set(digits).size===cars.length&&cars.every(c=>digits.includes(c))){
+    const rr=t.rows[p].map(norm);
+    const header=rr.findIndex(x=>/^車番[・･]?選手名$/.test(x));
+    if(header<0)continue;
+    const digits=rr.slice(header+1);
+    if(digits.every(c=>/^[1-9]$/.test(c))&&digits.length===cars.length&&new Set(digits).size===cars.length&&cars.every(c=>digits.includes(c))){
      carOrder=digits;break;
     }
    }
