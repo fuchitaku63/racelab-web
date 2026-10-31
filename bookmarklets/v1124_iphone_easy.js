@@ -167,7 +167,7 @@ const verifyYosoLineSection=(yosoDoc,entries,comments,sourceURL,raceNo)=>{
  const diagnostics=['YOSO_FALLBACK_ATTEMPTED=1'];
  if(!trustedRaceURL(sourceURL)||new URL(sourceURL,location.href).searchParams.get('pageType')!=='yoso')
   return{ok:false,diagnostics:diagnostics.concat('YOSO_ORIGIN_OR_QUERY_INVALID')};
- const m=String(yosoDoc.title||'').normalize('NFKC').match(/(?:^|\\s)(\\d{1,2})R\\b/);
+ const m=String(yosoDoc.title||'').normalize('NFKC').match(/(?:^|\s)(\d{1,2})R\b/);
  if(!m||Number(m[1])!==Number(raceNo))
   return{ok:false,diagnostics:diagnostics.concat('YOSO_TITLE_RACE_MISMATCH')};
  const body=String(yosoDoc.body?.innerText||yosoDoc.body?.textContent||'').normalize('NFKC');
@@ -180,7 +180,7 @@ const verifyYosoLineSection=(yosoDoc,entries,comments,sourceURL,raceNo)=>{
  const section=clean(tail.slice(0,end));
  if(section.length>500||section.length<20||!/[←⇐]/.test(section))
   return{ok:false,diagnostics:diagnostics.concat('YOSO_SECTION_SHAPE_INVALID')};
- const roles=Array.from(section.matchAll(/([1-9])\\s*(押え先|押さえ先|自力自在|追い上げ|追い込み|競り|三番手|3番手|先行|追込|自在|自力|捲り|まくり|捲|逃げ|逃|番手|マーク|追上|単騎|一人|総力|何でも)/g),m=>m[1]);
+ const roles=Array.from(section.matchAll(/([1-9])\s*(押え先|押さえ先|自力自在|追い上げ|追い込み|競り|三番手|3番手|先行|追込|自在|自力|捲り|まくり|捲|逃げ|逃|番手|マーク|追上|単騎|一人|総力|何でも)/g),m=>m[1]);
  const cars=entries.map(e=>String(e.car));
  diagnostics.push('YOSO_ROLE_COUNT='+roles.length);
  if(roles.length!==cars.length||new Set(roles).size!==cars.length||cars.some(c=>!roles.includes(c)))
