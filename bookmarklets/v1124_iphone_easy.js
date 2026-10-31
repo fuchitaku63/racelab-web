@@ -13,7 +13,7 @@ const def=MODE==='iphone'?'1-4':'1-12';const spec=MODE==='iphone'?await chooseIp
 // The post-race results table contains the car number and outcome remarks too;
 // looking for words such as 自力/先行 in arbitrary tables silently corrupts data.
 const getComments=(tables,entries=[])=>{
- const norm=x=>clean(x).normalize('NFKC').replace(/\\s+/g,'');
+ const norm=x=>clean(x).normalize('NFKC').replace(/\s+/g,'');
  const cars=(entries||[]).map(e=>String(e.car));
  if(!cars.length||new Set(cars).size!==cars.length)return{};
  for(const t of tables){
