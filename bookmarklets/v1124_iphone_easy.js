@@ -189,13 +189,13 @@ const payload=header+JSON.stringify({version:VERSION,extractorRevision:EXTRACTOR
 const shortReport=(()=>{
  const rows=['【競輪出走情報 iPhone抽出版】','識別: '+BUILD_ID,
  '対象: '+(base.place||'')+'｜指定 '+spec+'R｜読み込み '+races.filter(r=>Array.isArray(r.entries)&&r.entries.length>0).length+'/'+races.length+'R',
- '重要: 並びはDOM未確認ならコメント由来の参考情報です。競り・ジカ・欠損を含め、正式ライン未確認のまま買い目・確率を確定しないでください。',''];
+ '重要: 出走表とコメントの抽出は継続します。並びは未確認なら参考情報。正式ラインの照合はユニが別途行います。',''];
  for(const r of races){
   rows.push('【'+(r.race||'?')+'R】 '+(r.title||''));
   if(r.error){rows.push('取得失敗: '+r.error,'');continue;}
   rows.push('出走人数: '+(r.entries||[]).length);
   rows.push('参考ライン: '+(r.line||'取得できず'));
-  rows.push('ライン確認: '+(r.lineVerification?.domConfirmed===true?'ページ内の役割車番確認済み':'未確認・暫定（HOLD）'));
+  rows.push('ライン確認: '+(r.lineVerification?.domConfirmed===true?'ページ内の役割車番確認済み':'参考情報・正式ラインは要照合'));
   if(r.lineVerification?.specialContested)rows.push('競り・ジカ等の警告あり：分析不可');
   if(r.lineVerification?.issues?.length)rows.push('注意: '+r.lineVerification.issues.join(' / '));
   for(const e of r.entries||[]){
@@ -211,7 +211,7 @@ const exportPanel=()=>{
  const box=document.createElement('div');box.id=id;
  box.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#f8fafc;color:#111827;padding:14px;box-sizing:border-box;overflow:auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
  const h=document.createElement('h2');h.textContent='iPhone出走表｜取得 '+races.filter(r=>Array.isArray(r.entries)&&r.entries.length).length+'/'+races.length+'R｜'+BUILD_ID;h.style.cssText='font-size:17px;margin:6px 0 12px';box.appendChild(h);
- const note=document.createElement('p');note.textContent='まず【ユニへ送る】をタップ。出走表とコメントを取得できます。正式ラインを確認できない場合は参考ラインとして表示し、分析の安全判定は維持します。';note.style.cssText='font-size:13px';box.appendChild(note);
+ const note=document.createElement('p');note.textContent='【ユニへ送る】で出走表・コメントをコピー。並びは参考情報として表示し、ユニが別途照合します。RaceLab用JSONでは従来の安全判定を維持します。';note.style.cssText='font-size:13px';box.appendChild(note);
  const area=document.createElement('textarea');area.value=shortReport;area.readOnly=true;area.setAttribute('aria-label','出走表とコメントの抽出レポート');area.style.cssText='width:100%;min-height:55vh;box-sizing:border-box;font-size:12px;background:white;border:1px solid #94a3b8;border-radius:7px;color:#111827;';box.appendChild(area);
  const row=document.createElement('div');row.style.cssText='display:flex;gap:10px;margin:12px 0;flex-wrap:wrap';box.appendChild(row);
  const copyTo=async(value,button)=>{let ok=false;try{await navigator.clipboard.writeText(value);ok=true}catch(e){}if(!ok){area.value=value;area.focus();area.select();area.setSelectionRange(0,area.value.length);try{ok=document.execCommand('copy')}catch(e){}}button.textContent=ok?'コピーしました ✓':'下のテキストを長押ししてコピー';};
