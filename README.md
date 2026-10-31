@@ -4,7 +4,7 @@
 
 iPhone: GitHub Pages のURLをSafariで開き、「共有」→「ホーム画面に追加」。初回はオンラインで約5MBの取得が必要です。オフライン動作にはService Workerのインストール成功が必要です。
 
-実際のレースPDF、入力履歴、認証情報、非公開ソースは収録していません。復元するアプリのSHA-256: 95937429ea7fe32251a1264171b252e7c3d9cdd8fe9578ddf01c8ea6b1ef78ca。配信上38分割していますが起動時にSHA-256を照合して復元します。
+実際のレースPDF、入力履歴、認証情報、非公開ソースは収録していません。復元するアプリのSHA-256: e1bdcd39782ba49b1cc3655148a941e704eac6269a30c7aaedc46d970a41f9ad。配信上38分割していますが起動時にSHA-256を照合して復元します。
 
 GitHub Pages: Settings → Pages → Build and deployment → Deploy from a branch → main / (root)。
 
@@ -14,6 +14,12 @@ GitHub Pages: Settings → Pages → Build and deployment → Deploy from a bran
 
 ## 開発時の検証
 
-Node.jsで `node --test tests/*.test.cjs` を実行し、38分割・SHA-256および架空データの受信・停止条件を検証します。`node tests/browser.cjs` はChromiumとPlaywrightがある環境で、貼付・表示・停止・旧キャッシュからの更新・オフライン再起動を検証します。ブラウザ試験は旧版の基準コミット `e74309ecfa73bc598f09b23bac6756abf8303781` を参照するため、Git履歴が必要です。Playwrightは通常のNode解決パスかテスト環境の `/opt/codex/runtimes/cua/lib/node_modules/playwright` から読み込みます。iPhone実機Safariの操作は別途確認してください。
+Node.jsで `node --test tests/*.test.cjs` を実行し、38分割・SHA-256および架空データの受信・停止条件を検証します。`node tests/browser.cjs` はChromiumとPlaywrightがある環境で、貼付・表示・停止・旧キャッシュからの更新・オフライン再起動を検証します。ブラウザ試験は旧版の基準コミット `67850edb27ea62653ba93ad44c86946f84580659` を参照するため、Git履歴が必要です。Playwrightは通常のNode解決パスかテスト環境の `/opt/codex/runtimes/cua/lib/node_modules/playwright` から読み込みます。iPhone実機Safariの操作は別途確認してください。
 
 分割ファイルを変更した場合、`cat app/v1/part-*.txt | sha256sum` の結果を `index.html` の `EXPECTED` とこのREADMEのSHA-256に反映してください。Service Workerの更新時は、既存キャッシュと新しい本体が混ざらないことを検証します。
+
+## V11.24 並び予想DOMの調査版
+
+利用者提供のV11.24 iPhone／PC版を基にした検証用ソースは `bookmarklets/` にあります。`node scripts/build-bookmarklets.cjs` で同ディレクトリ内の `generated/` に圧縮したブックマークレットを再生成できます。`node tests/bookmarklet-dom.cjs` は、外部通信を遮断した架空DOMで、抽出からRaceLabの受信、HOLD、複数レース選択までをChromiumで検証します。iPhoneの画面幅を模擬する試験は実機Safariの試験ではありません。
+
+Issue #3の実ページの生DOMは開発環境から取得できていません。実際のページ構造や実機での解消は未確認です。抽出条件、保持するHOLD、現地確認の範囲は [診断メモ](docs/issue-3-diagnostics.md) に記載しています。オッズの取得は追加していません。
