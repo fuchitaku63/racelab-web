@@ -34,6 +34,6 @@ test('one-tap report contains riders and comments without fabricating line confi
  const races=[{race:'7',title:'架空7R',line:'5-1-7',lineVerification:{domConfirmed:false,issues:[]},entries:[{car:'1',name:'架空選手',score:104.5,b:'2',s:'1',nige:'0',makuri:'3',sashi:'1',marking:'0'}],comments:{1:'先行基本に。'}}];
  const report=make(races,{place:'63'},'7','iphone-easy-20261031-r1');
  assert.match(report,/架空選手/);assert.match(report,/先行基本に。/);
- assert.match(report,/5-1-7/);assert.match(report,/未確認・暫定（HOLD）/);
+ assert.match(report,/5-1-7/);assert.match(report,/参考情報・正式ラインは要照合/);
  assert.match(report,/iphone-easy-20261031-r1/);
 });
