@@ -10,7 +10,8 @@ function convertReport(input){
  if(input.length>150000)throw Error('簡易レポートが長すぎます');
  const lines=input.replace(/\r\n?/g,'\n').split('\n').map(s=>s.trim());
  const m=lines.find(s=>s.startsWith('識別: '));
- if(!m||!/iphone-easy-20261031-r1/.test(m))throw Error('未対応のiPhone簡易レポートです');
+ const buildId=m?m.slice('識別: '.length).trim():'';
+ if(!/^iphone-easy-20261031-r[123]$/.test(buildId))throw Error('未対応のiPhone簡易レポートです');
  const current=[];let race=null,ref='iPhone簡易レポート貼付（元ページURLは未記録）';
  for(const line of lines){
   const h=line.match(/^【([1-9]|1[0-2])R】\s*(.+)$/);
@@ -40,7 +41,7 @@ function convertReport(input){
   r.lineGroupCheck={ok:false,reasons:['文章レポートからの参考ライン'],flatCount:g.flat().length};
   r.systemReadiness={lineReady:false,lineGroupOK:false,oddsReady:false,coreCandidateReady:false};
  }
- return JSON.stringify({version:VERSION,extractorRevision:'iphone-easy-report-adapter-1',mode:'iphone',buildId:'iphone-easy-20261031-r1',createdAt:new Date().toISOString(),raceCount:current.length,races:current});
+ return JSON.stringify({version:VERSION,extractorRevision:'iphone-easy-report-adapter-2',mode:'iphone',buildId,createdAt:new Date().toISOString(),raceCount:current.length,races:current});
 }
 function init(){
  document.addEventListener('click',e=>{
