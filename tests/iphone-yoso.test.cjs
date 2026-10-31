@@ -60,5 +60,5 @@ test('same-origin fallback is wired only for missing role DOM; safety gate persi
  assert.match(src,/searchParams\.set\('pageType','yoso'\)/);
  assert.match(src,/fetchWithTimeout\(yosoURL\.href\)/);
  assert.match(src,/const domConfirmed=lineSource==='footerLineDOM'&&wl\.originVerified===true;/);
- assert.match(src,/const BUILD_ID='iphone-easy-20261031-r3'/);
+ assert.match(src,/const BUILD_ID='iphone-easy-20261031-r4'/);
 });
