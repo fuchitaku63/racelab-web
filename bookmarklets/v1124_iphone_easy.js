@@ -170,7 +170,9 @@ const verifyYosoLineSection=(yosoDoc,entries,comments,sourceURL,raceNo)=>{
  const m=String(yosoDoc.title||'').normalize('NFKC').match(/(?:^|\s)(\d{1,2})R\b/);
  if(!m||Number(m[1])!==Number(raceNo))
   return{ok:false,diagnostics:diagnostics.concat('YOSO_TITLE_RACE_MISMATCH')};
- const body=String(yosoDoc.body?.innerText||yosoDoc.body?.textContent||'').normalize('NFKC');
+ const visibleBody=yosoDoc.body?.cloneNode?.(true)||yosoDoc.body;
+ visibleBody?.querySelectorAll?.('script,style,noscript,template').forEach(el=>el.remove());
+ const body=String(visibleBody?.innerText||visibleBody?.textContent||'').normalize('NFKC');
  const headings=[...body.matchAll(/並び予想/g)];
  diagnostics.push('YOSO_HEADING_COUNT='+headings.length);
  if(headings.length!==1)return{ok:false,diagnostics:diagnostics.concat('YOSO_HEADING_AMBIGUOUS')};
