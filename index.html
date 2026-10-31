@@ -3,21 +3,41 @@
 <body><h1>RaceLab を起動しています</h1><p id="status" role="status">安全にアプリを読み込んでいます…</p><progress id="bar" max="100" value="0"></progress><p>初回は約5MBのダウンロードが必要です。次回以降はオフラインでも利用できます（対応環境の場合）。</p>
 <script>
 (async()=>{
- const COUNT=38, PREFIX='./app/v1/part-', EXPECTED='95937429ea7fe32251a1264171b252e7c3d9cdd8fe9578ddf01c8ea6b1ef78ca';
+ const COUNT=38, PREFIX='./app/v1/part-', EXPECTED='e1bdcd39782ba49b1cc3655148a941e704eac6269a30c7aaedc46d970a41f9ad';
  const message=document.getElementById('status'),bar=document.getElementById('bar');
  try {
-  const chunks=new Array(COUNT);
-  let finished=0;
-  await Promise.all(Array.from({length:COUNT},async(_,i)=>{
-   const r=await fetch(PREFIX+String(i).padStart(3,'0')+'.txt?rev='+EXPECTED,{cache:'default'});
-   if(!r.ok)throw Error('プログラムの一部を取得できませんでした（'+(i+1)+'/'+COUNT+'、HTTP '+r.status+'）');
-   chunks[i]=await r.text();
-   finished++;bar.value=finished/COUNT*85;message.textContent='アプリを準備しています… '+finished+'/'+COUNT;
-  }));
-  let html=chunks.join('');
-  const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(html));
-  const hash=Array.from(new Uint8Array(d),b=>b.toString(16).padStart(2,'0')).join('');
-  if(hash!==EXPECTED)throw Error('本体の整合性検査に失敗しました。画面を更新してください。');
+  // The previous worker ignores query strings, so activate a new shell before
+  // reading changed parts; on offline startup retain the installed cache.
+  if('serviceWorker' in navigator&&window.isSecureContext&&navigator.onLine!==false){
+   try{
+    const reg=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});
+    await reg.update();
+    const worker=reg.installing||reg.waiting;
+    if(worker&&worker.state!=='activated')await new Promise(resolve=>{
+     const done=()=>{clearTimeout(timer);worker.removeEventListener('statechange',changed);resolve();};
+     const changed=()=>{if(worker.state==='activated'||worker.state==='redundant')done();};
+     const timer=setTimeout(done,10000);worker.addEventListener('statechange',changed);changed();
+    });
+   }catch(e){/* The integrity check below remains authoritative. */}
+  }
+  let html='',verified=false;
+  // A previous worker may still control some requests while an update claims
+  // this page. Retry the whole set after the transition, never execute a mix.
+  for(let attempt=0;attempt<3;attempt++){
+   const chunks=new Array(COUNT);let finished=0;
+   await Promise.all(Array.from({length:COUNT},async(_,i)=>{
+    const r=await fetch(PREFIX+String(i).padStart(3,'0')+'.txt?rev='+EXPECTED,{cache:'default'});
+    if(!r.ok)throw Error('プログラムの一部を取得できませんでした（'+(i+1)+'/'+COUNT+'、HTTP '+r.status+'）');
+    chunks[i]=await r.text();
+    finished++;bar.value=finished/COUNT*85;message.textContent='アプリを準備しています… '+finished+'/'+COUNT;
+   }));
+   html=chunks.join('');
+   const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(html));
+   const hash=Array.from(new Uint8Array(d),b=>b.toString(16).padStart(2,'0')).join('');
+   if(hash===EXPECTED){verified=true;break;}
+   if(attempt<2&&'serviceWorker' in navigator&&navigator.onLine!==false){message.textContent='更新を確認しています…';await new Promise(resolve=>setTimeout(resolve,1000));}
+  }
+  if(!verified)throw Error('本体の整合性検査に失敗しました。画面を更新してください。');
   // Original RaceLab HTML retained; verify before execution.
   document.open();document.write(html);document.close();
  }catch(err){message.textContent='起動に失敗しました：'+err.message+'。オンラインでページを再読み込みしてください。';bar.hidden=true;}
