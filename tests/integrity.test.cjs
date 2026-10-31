@@ -1,0 +1,3 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require('node:crypto');
+test('38 ordered parts match loader and README SHA-256',()=>{const names=fs.readdirSync('app/v1').filter(n=>/^part-\d+\.txt$/.test(n)).sort();assert.deepEqual(names,Array.from({length:38},(_,i)=>`part-${String(i).padStart(3,'0')}.txt`));const hash=crypto.createHash('sha256');for(const n of names)hash.update(fs.readFileSync('app/v1/'+n));const actual=hash.digest('hex'),loader=fs.readFileSync('index.html','utf8'),readme=fs.readFileSync('README.md','utf8');assert.equal(loader.match(/EXPECTED='([a-f0-9]{64})'/)[1],actual);assert.ok(readme.includes(actual));assert.match(loader,/COUNT=38/);});

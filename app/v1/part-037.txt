@@ -170,7 +170,7 @@ globalThis.RaceKeirinSimple=(()=>{
   if(groups.some(g=>!g.length)||flat.some(x=>!Number.isInteger(x)||!all.has(x))||new Set(flat).size!==flat.length||flat.length!==numbers.length)throw Error('ラインは全員を1回ずつ「1-2-3 / 4-5 / 6-7」で入力してください。未確認なら空欄にしてください。');
   return {groups,status:'USER_UNCONFIRMED'};
  }
- function features(r){const entrants=r.entries;const scored=entrants.map(e=>e.stats.score).filter(Number.isFinite);const mean=scored.length?scored.reduce((a,b)=>a+b,0)/scored.length:null;
+ function features(r){RaceBookmark1123.assertReady(r);const entrants=r.entries;const scored=entrants.map(e=>e.stats.score).filter(Number.isFinite);const mean=scored.length?scored.reduce((a,b)=>a+b,0)/scored.length:null;
   const maxOf=k=>Math.max(1,...entrants.map(e=>Number.isFinite(e.stats[k])?e.stats[k]:0));
   const keys=['escape','makuri','sashi','mark'],maxes=Object.fromEntries(keys.map(k=>[k,maxOf(k)]));
   return entrants.map(e=>{const stats=e.stats,score=Number.isFinite(stats.score)&&scored.length>=2?clamp(.5+(stats.score-mean)/30,.20,.80):null;
@@ -184,11 +184,11 @@ globalThis.RaceKeirinSimple=(()=>{
    const known=factors.filter(x=>x.value!==null),coverage=known.reduce((sum,x)=>sum+x.weight,0);
    const base=coverage?known.reduce((sum,x)=>sum+x.weight*x.value,0)/coverage:null;
    const sorted=keys.filter(k=>actions[k]!=null).sort((a,b)=>(actions[b]??0)-(actions[a]??0));const labels={escape:'逃げ',makuri:'捲り',sashi:'差し',mark:'マーク'};
-   return {number:e.number,name:e.name,stats,base,coverage,actions,factors,style:sorted.length?labels[sorted[0]]+'実績が相対的に多い':'戦法不明'};
+   return {number:e.number,name:e.name,comment:e.comment||'',stats,base,coverage,actions,factors,style:sorted.length?labels[sorted[0]]+'実績が相対的に多い':'戦法不明'};
   });}
  function rng(seed){let x=2166136261;for(const c of seed)x=Math.imul(x^c.charCodeAt(0),16777619);x>>>=0;return ()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return ((x>>>0)+.5)/4294967296;};}
  function normal(random){let rest=null;return ()=>{if(rest!==null){const v=rest;rest=null;return v;}const z=Math.sqrt(-2*Math.log(random()));const a=2*Math.PI*random();rest=z*Math.sin(a);return z*Math.cos(a);};}
- function init(r,count,lineText){if(!Array.isArray(r?.entries)||r.entries.length<3||r.entries.length>9)throw Error('競輪のレースを読み込んでください。');if(!Number.isInteger(count)||count<10000||count>100000)throw Error('10,000〜100,000回で指定してください。');const rows=features(r),line=lines(lineText,rows.map(e=>e.number));
+ function init(r,count,lineText){if(!Array.isArray(r?.entries)||r.entries.length<3||r.entries.length>9)throw Error('競輪のレースを読み込んでください。');if(!Number.isInteger(count)||count<10000||count>100000)throw Error('10,000〜100,000回で指定してください。');const rows=features(r),line=lines(lineText,rows.map(e=>e.number));if(r.bookmarkSafety){const source=lines(r.lines.notation,rows.map(e=>e.number));if(!line.groups.length||JSON.stringify(line.groups)!==JSON.stringify(source.groups))throw Error('分析HOLD: 入力ラインが抽出ラインと不一致です。');}
   const members=new Map();line.groups.forEach(g=>g.forEach((n,i)=>members.set(n,i)));const src=r.source?.fingerprint||r.source?.reference||r.title||'unknown';
   return {rows,line,states:SCENARIOS.map(s=>({s,tally:new Map(),win:new Map(rows.map(h=>[h.number,0])),podium:new Map(rows.map(h=>[h.number,0])),completed:0,normal:normal(rng(src+'|'+s.key+'|v2|'+lineText)),members}))};}
  function step(st,rows,n){const {s,tally,win,podium,normal,members}=st;
@@ -359,23 +359,24 @@ globalThis.RaceHoleAnalysis=(()=>{
   try{const model=await RaceJraScenario.runAsync(horse,count,(p,s)=>{$('horseProgress').textContent=`${s}：${(p*100).toFixed(0)}% 完了`;});const holes=renderHoleFocus(model,'horseHoleFocus');renderScenarios(model.scenarios,'horseScenarios',holes);
    $('horseProgress').textContent=`完了：各展開${count.toLocaleString('ja-JP')}回、合計${(3*count).toLocaleString('ja-JP')}回。表示率はモデル内の条件付き出現率です。`;
   }catch(e){$('horseError').textContent=e.message;}finally{horseBusy=false;$('horseSimulate').disabled=false;}});
- function selectKeirin(idx){const r=keirinPack?.races?.[idx];if(!r)return;
+ function selectKeirin(idx){const r=keirinPack?.races?.[idx];if(!r)return;++keirinGeneration;const hold=RaceBookmark1123.holdReason(r);$('keirinError').textContent=hold?'分析HOLD: '+hold:'';$('keirinSimulate').disabled=keirinBusy||!!hold;$('keirinLine').disabled=!!hold;
   $('keirinScenarios').replaceChildren();$('keirinHoleFocus').hidden=true;$('keirinHoleFocus').replaceChildren();$('keirinProgress').textContent='';
   $('keirinRaceMeta').innerHTML=`<div class="hl-race-summary"><span>${E(r.date||'開催日未確認')}</span><span><strong>${E(r.venue||'競輪場未確認')} ${r.raceNo}R</strong></span><span>${r.entries.length}人</span><span>ライン：${r.lines?.notation?'参考・未確認':'未取得'}</span></div>`;
-  $('keirinLine').value=r.lines?.notation||'';
+  $('keirinLine').value=r.bookmarkSafety?.rawLine||r.lines?.notation||'';
+  if(hold){$('keirinRaceMeta').insertAdjacentHTML('beforeend','<p class="hl-error">分析停止：'+E(hold)+'。元の並び：'+E(r.bookmarkSafety.rawLine||'未取得')+'</p>');$('keirinRankRows').innerHTML=r.entries.map(e=>`<tr><td>HOLD</td><td><strong>${e.number} ${E(e.name)}</strong><div class="hl-muted">コメント：${E(e.comment||'未取得')}</div></td><td>${E(e.stats.score??'—')}</td><td>${['escape','makuri','sashi','mark'].map(k=>E(e.stats[k]??'—')).join(' / ')}</td><td>ライン確認まで分析停止</td></tr>`).join('');return;}
   const rows=RaceKeirinSimple.features(r).sort((a,b)=>(b.base??-1)-(a.base??-1));
-  $('keirinRankRows').innerHTML=rows.map((h,i)=>`<tr><td>${i+1}</td><td><strong>${h.number} ${E(h.name)}</strong><div class="hl-muted">${E(h.style)}</div></td><td>${h.stats.score??'—'}</td><td>${['escape','makuri','sashi','mark'].map(k=>h.stats[k]??'—').join(' / ')}</td><td><span class="hl-score">${h.base==null?'未評価':(h.base*100).toFixed(1)}</span><div class="hl-muted">掲載勝率 ${h.stats.winRate??'不明'}%・3連対率 ${h.stats.thirdRate??'不明'}%</div><details class="hl-evidence"><summary>参照した能力・戦法の根拠</summary><ul class="hl-factor-list">${h.factors.map(htmlFactor).join('')}</ul><p class="hl-muted">掲載値の対象期間・母数を確認。近況・持久力・バンク適性は未評価です。</p></details></td></tr>`).join('');
+  $('keirinRankRows').innerHTML=rows.map((h,i)=>`<tr><td>${i+1}</td><td><strong>${h.number} ${E(h.name)}</strong><div class="hl-muted">${E(h.style)}</div>${r.bookmarkSafety?`<div class="hl-muted">コメント：${E(h.comment||'未取得')}</div>`:''}</td><td>${h.stats.score??'—'}</td><td>${['escape','makuri','sashi','mark'].map(k=>h.stats[k]??'—').join(' / ')}</td><td><span class="hl-score">${h.base==null?'未評価':(h.base*100).toFixed(1)}</span><div class="hl-muted">掲載勝率 ${h.stats.winRate??'不明'}%・3連対率 ${h.stats.thirdRate??'不明'}%</div><details class="hl-evidence"><summary>参照した能力・戦法の根拠</summary><ul class="hl-factor-list">${h.factors.map(htmlFactor).join('')}</ul><p class="hl-muted">掲載値の対象期間・母数を確認。近況・持久力・バンク適性は未評価です。</p></details></td></tr>`).join('');
  }
- function loaded(pack){keirinPack=pack;$('keirinLoaded').hidden=false;$('keirinSelect').replaceChildren();pack.races.forEach((r,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=`${r.venue||'競輪'} ${r.raceNo}R（${r.entries.length}人）`; $('keirinSelect').append(o);});selectKeirin(0);
-  $('keirinStatus').textContent=`${pack.races.length}レースを読み込みました。分析したいレースを選択してください。`; $('keirinError').textContent='';
+ function loaded(pack){keirinPack=pack;$('keirinError').textContent='';$('keirinLoaded').hidden=false;$('keirinSelect').replaceChildren();pack.races.forEach((r,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=`${r.venue||'競輪'} ${r.raceNo}R（${r.entries.length}人）`; $('keirinSelect').append(o);});selectKeirin(0);
+  $('keirinStatus').textContent=`${pack.races.length}レースを読み込みました。分析したいレースを選択してください。`;
  }
  $('keirinSelect').addEventListener('change',()=>selectKeirin(Number($('keirinSelect').value)));
  $('keirinFile').addEventListener('change',async ev=>{const file=ev.target.files?.[0];if(!file)return;const t=++keirinGeneration;$('keirinStatus').textContent='競輪PDFを解析中…';$('keirinError').textContent='';try{const parsed=await RacePDF.extract(file);if(!RaceKeirinPDF.matches(parsed))throw Error('このPDFは対応する競輪出走表ではありません。');const now=new Date().toISOString().replace(/\.\d{3}Z$/,'Z');const pack=RaceKeirinPDF.parse(parsed,{acquiredAt:now,checkedAt:now,fileName:file.name});const candidate=RaceImportCore.candidateFromPack(pack);if(t===keirinGeneration)loaded(candidate);}catch(e){if(t===keirinGeneration)$('keirinError').textContent=e.message;}finally{ev.target.value='';}});
- $('keirinImport').onclick=()=>{try{const text=$('keirinPaste').value;loaded(RaceBookmark1123.toCandidates(text,'REAL',new Date().toISOString().replace(/\.\d{3}Z$/,'Z')));}catch(e){$('keirinError').textContent=e.message;}};
- $('keirinSimulate').addEventListener('click',async()=>{if(!keirinPack||keirinBusy)return;const idx=Number($('keirinSelect').value),r=keirinPack.races[idx],count=Number($('keirinRuns').value);keirinBusy=true;$('keirinSimulate').disabled=true;$('keirinError').textContent='';$('keirinScenarios').replaceChildren();
-  try{const m=await RaceKeirinSimple.runAsync(r,count,$('keirinLine').value,(p,s)=>{$('keirinProgress').textContent=`${s}：${Math.floor(p*100)}% 完了`;});const holes=renderHoleFocus(m,'keirinHoleFocus');renderScenarios(m.scenarios,'keirinScenarios',holes);
+ $('keirinImport').onclick=()=>{try{++keirinGeneration;const text=$('keirinPaste').value;loaded(RaceBookmark1123.toCandidates(text,'REAL',new Date().toISOString().replace(/\.\d{3}Z$/,'Z')));}catch(e){$('keirinError').textContent=e.message;}};
+ $('keirinSimulate').addEventListener('click',async()=>{if(!keirinPack||keirinBusy)return;const idx=Number($('keirinSelect').value),r=keirinPack.races[idx],count=Number($('keirinRuns').value),token=++keirinGeneration;keirinBusy=true;$('keirinSimulate').disabled=true;$('keirinError').textContent='';$('keirinScenarios').replaceChildren();$('keirinHoleFocus').hidden=true;$('keirinHoleFocus').replaceChildren();
+  try{RaceBookmark1123.assertReady(r);const m=await RaceKeirinSimple.runAsync(r,count,$('keirinLine').value,(p,s)=>{if(token===keirinGeneration)$('keirinProgress').textContent=`${s}：${Math.floor(p*100)}% 完了`;});if(token!==keirinGeneration)return;const holes=renderHoleFocus(m,'keirinHoleFocus');renderScenarios(m.scenarios,'keirinScenarios',holes);
    $('keirinProgress').textContent=`完了：各戦法${count.toLocaleString('ja-JP')}回、合計${(3*count).toLocaleString('ja-JP')}回。仮モデルの結果で正式予想ではありません。`;
-  }catch(e){$('keirinError').textContent=e.message;$('keirinProgress').textContent='入力条件の確認が必要です。';}finally{keirinBusy=false;$('keirinSimulate').disabled=false;}});
+  }catch(e){if(token===keirinGeneration){$('keirinError').textContent=e.message;$('keirinProgress').textContent='入力条件の確認が必要です。';}}finally{keirinBusy=false;const selected=keirinPack?.races?.[Number($('keirinSelect').value)];$('keirinSimulate').disabled=!!RaceBookmark1123.holdReason(selected);}});
  switchMode('horse');
 })();
 </script>
