@@ -23,6 +23,16 @@ for(const [name,change] of [['DOM未確認',r=>{r.lineVerification.domConfirmed=
  await page.click('#keirinSimulate');
  await page.waitForFunction(()=>document.querySelector('#keirinProgress').textContent.startsWith('完了：'),null,{timeout:30000});
  assert.equal(await page.locator('#keirinScenarios .hl-scenario').count(),3,name);
+ assert.equal(await page.locator('#keirinScenarios .hl-scenario table').count(),0,'no wide 670px table in mobile results');
+ assert.equal(await page.locator('#keirinScenarios .hl-scenario ol').count(),3,'six combos should be stacked');
+ const bounds=await page.locator('#keirinScenarios .hl-scenario').evaluateAll(cards=>cards.map(el=>({
+   left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,
+   width:el.getBoundingClientRect().width,
+   viewport:window.innerWidth,
+   hasReference:el.textContent.includes('参考出現率')
+ })));
+ for(const b of bounds){assert.ok(b.right<=b.viewport+2&&b.left>=-2,'mobile result card must fit in viewport: '+JSON.stringify(b));assert.ok(b.hasReference);}
+ assert.match(await page.locator('#keirinLinePreview').innerText(),/参考ライン・未確認/);
  assert.match(await page.locator('#keirinProgress').innerText(),/ライン補正なし/);
 }console.log('PASS DOM未確認・競りでもライン補正なし参考試算。元情報を維持');
 const mult=payload();const second=casePayload(r=>{r.lineVerification.domConfirmed=false}).races[0];second.race='2';mult.races.push(second);mult.raceCount=2;
