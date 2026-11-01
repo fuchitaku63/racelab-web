@@ -28,3 +28,22 @@ jobs:
         run: node tests/browser.cjs
         env:
           CHROMIUM_PATH: /usr/bin/google-chrome
+
+  webkit-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright WebKit and required libraries
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps webkit
+      - name: Browser integration in WebKit
+        run: node tests/browser.cjs
+        env:
+          RACELAB_BROWSER: webkit
