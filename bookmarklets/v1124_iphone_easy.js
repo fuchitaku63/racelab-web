@@ -108,9 +108,56 @@ const parsePublishedRoleLine=(raw,entries)=>{
  if(active.length)groups.push(active);
  return lineGroupCheck(groups,entries).ok?groups:null;
 };
+
+// Kdreams live footer: a .num.n{car} span for every rider and a .space span
+// at each published line break. This is stronger evidence than role text.
+const parseKdreamsFooterDOM=(doc,entries)=>{
+ const diagnostics=['KDR_DOM_FOOTER_ATTEMPTED=1'],found=[];
+ const feet=Array.from(doc?.querySelectorAll?.('dl.racecard_footer-contents')||[]);
+ diagnostics.push('KDR_FOOTER_COUNT='+feet.length);
+ for(const el of feet){
+  if(!/^並び予想\s*[:：]?$/.test(clean(el.querySelector?.('dt')?.textContent||'')))continue;
+  const container=el.querySelector?.('dd .one_line_info');
+  if(!container)continue;
+  let groups=[],current=[],arrows=0,invalid=false;
+  for(const node of Array.from(container.children||[])){
+   const has=cls=>node.classList?.contains?.(cls)===true;
+   if(has('arrow')){arrows++;if(clean(node.textContent)!=='←')invalid=true;continue;}
+   if(has('space')){if(clean(node.textContent))invalid=true;if(current.length){groups.push(current);current=[];}continue;}
+   if(has('num')){
+    const car=clean(node.textContent);
+    if(!/^[1-9]$/.test(car)||!has('n'+car)){invalid=true;break;}
+    current.push(car);continue;
+   }
+   if(clean(node.textContent))invalid=true;
+  }
+  if(current.length)groups.push(current);
+  const valid=lineGroupCheck(groups,entries);
+  if(invalid||arrows!==1||!valid.ok){
+   diagnostics.push('KDR_FOOTER_INVALID='+[invalid?'UNKNOWN_NODE':'',arrows!==1?'ARROW':'',...valid.reasons].filter(Boolean).join(','));
+   continue;
+  }
+  const line=groups.map(g=>g.join('-')).join(' / ');
+  found.push({lineGroups:groups,line,raw:line,source:'footerLineDOM:one_line_info_num_space'});
+ }
+ const distinct=new Map(found.map(x=>[x.line,x]));
+ diagnostics.push('KDR_FOOTER_VALID='+found.length,'KDR_FOOTER_DISTINCT='+distinct.size);
+ if(distinct.size===1)return{ok:true,...[...distinct.values()][0],diagnostics};
+ if(distinct.size>1)return{ok:false,conflict:true,diagnostics:diagnostics.concat('KDR_FOOTER_CONFLICT')};
+ return{ok:false,diagnostics};
+};
 const trustedRaceURL=(url)=>{try{const u=new URL(url,location.href),base=new URL(location.href);return u.protocol==='https:'&&u.hostname==='keirin.kdreams.jp'&&u.origin===base.origin&&/\/racedetail\/\d{16}\/?$/.test(u.pathname)}catch{return false}};
 const getWrittenLineGroups=(doc,tables,entries,comments={},place='',sourceURL='')=>{
  const candidates=[],diagnostics=[],observations=[],originVerified=trustedRaceURL(sourceURL),numbers=entries.map(e=>String(e.car));
+ const parsedFooter=parseKdreamsFooterDOM(doc,entries);
+ if(originVerified&&parsedFooter.ok)return{
+  ok:true,lineGroups:parsedFooter.lineGroups,line:parsedFooter.line,
+  lineSeq:parsedFooter.lineGroups.flat().join('-'),
+  lineSource:'footerLineDOM',source:parsedFooter.source,
+  raw:parsedFooter.raw,warnings:[],diagnostics:parsedFooter.diagnostics,
+  originVerified:true};
+ if(parsedFooter.conflict)return{
+  ok:false,reason:'掲載ラインのDOM候補が不一致',diagnostics:parsedFooter.diagnostics,originVerified};
  let headingCount=0;
  const tval=e=>clean(e?.innerText||e?.textContent||'');
  // Mobile racecard lineup markers may be encoded in DOM attributes.
@@ -234,6 +281,15 @@ const verifyYosoLineSection=(yosoDoc,entries,comments,sourceURL,raceNo)=>{
  const m=title.match(/(?:^|\s)(\d{1,2})R\b/);
  if(!m||Number(m[1])!==Number(raceNo))
   return{ok:false,diagnostics:diagnostics.concat('YOSO_TITLE_RACE_MISMATCH')};
+ const structured=parseKdreamsFooterDOM(yosoDoc,entries);
+ diagnostics.push(...structured.diagnostics);
+ if(structured.ok)return{
+  ok:true,lineGroups:structured.lineGroups,line:structured.line,
+  lineSeq:structured.lineGroups.flat().join('-'),
+  lineSource:'footerLineDOM',source:structured.source,
+  raw:structured.raw,diagnostics:diagnostics.concat('YOSO_STRUCTURED_DOM_VERIFIED=1'),
+  originVerified:true,warnings:[]};
+ if(structured.conflict)return{ok:false,diagnostics:diagnostics.concat('YOSO_FOOTER_CONFLICT')};
  const bodyNode=yosoDoc.body?.cloneNode?.(true)||yosoDoc.body;
  bodyNode?.querySelectorAll?.('script,style,noscript,template').forEach(el=>el.remove());
  const body=String(bodyNode?.innerText||bodyNode?.textContent||'').normalize('NFKC');
