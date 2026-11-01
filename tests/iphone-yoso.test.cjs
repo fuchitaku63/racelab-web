@@ -70,6 +70,59 @@ test('same-origin, page type, race-number and title gates are retained',()=>{
   [doc(12,body(roles.r12)),url(12).replace('keirin.kdreams.jp','evil.invalid'),12],
   [doc(12,body(roles.r12)),url(9),12]])assert.equal(parse(d,entries,comments,u,r).ok,false);
 });
+
+function domFooter(groups){
+ const spans=[{className:'arrow',textContent:'←'}];
+ for(const [i,g] of groups.entries()){
+  for(const car of g)spans.push({className:'num n'+car,textContent:String(car)});
+  if(i<groups.length-1)spans.push({className:'space',textContent:''});
+ }
+ for(let i=0;i<9;i++)spans.push({className:'space',textContent:''});
+ const child=el=>({textContent:el.textContent,
+  classList:{contains:k=>el.className.split(/\s+/).includes(k)}});
+ return{
+  querySelector(sel){
+   if(sel==='dt')return{textContent:'並び予想'};
+   if(sel==='dd .one_line_info')return{children:spans.map(child)};
+   return null;
+  }
+ };
+}
+function structuredDoc(r,groups){
+ const d=doc(r,'レース詳細\n予想');
+ d.querySelectorAll=selector=>selector==='dl.racecard_footer-contents'?[domFooter(groups)]:[];
+ return d;
+}
+test('actual Kdreams footer num/space spans yield exact 9R and 12R published lines',()=>{
+ const cases=[
+  [9,[['5','1','9'],['2','7','8'],['3','4','6']],'5-1-9 / 2-7-8 / 3-4-6'],
+  [12,[['1','4'],['2','8','7'],['3'],['5','6'],['9']],'1-4 / 2-8-7 / 3 / 5-6 / 9']
+ ];
+ for(const [r,g,expected] of cases){
+  const result=parse(structuredDoc(r,g),entries,comments,url(r),r);
+  assert.equal(result.ok,true,JSON.stringify(result.diagnostics));
+  assert.equal(result.line,expected);
+  assert.ok(result.diagnostics.includes('YOSO_STRUCTURED_DOM_VERIFIED=1'));
+ }
+});
+test('footer span separator is required, not inferred from number order',()=>{
+ const d=structuredDoc(9,[['5','1','9'],['2','7','8'],['3','4','6']]);
+ const footer=d.querySelectorAll('dl.racecard_footer-contents')[0];
+ const groups=footer.querySelector('dd .one_line_info').children;
+ // Without explicit .space separators, the page is ambiguous: reject a 9-car single line.
+ const allCars=groups.filter(el=>el.classList.contains('num'));
+ d.querySelectorAll=()=>[{querySelector:q=>q==='dt'?{textContent:'並び予想'}:q==='dd .one_line_info'?{children:[{textContent:'←',classList:{contains:x=>x==='arrow'}},...allCars]}:null}];
+ assert.equal(parse(d,entries,comments,url(9),9).ok,false);
+});
+test('conflicting DOM footers and duplicate cars fail closed',()=>{
+ const d=structuredDoc(9,[['5','1','9'],['2','7','8'],['3','4','6']]);
+ const footer=d.querySelectorAll('dl.racecard_footer-contents')[0];
+ d.querySelectorAll=()=>[footer,domFooter([['1','4'],['2','8','7'],['3'],['5','6'],['9']])];
+ assert.equal(parse(d,entries,comments,url(9),9).ok,false);
+ const duplicate=structuredDoc(9,[['5','1','9'],['2','7','8'],['3','4','8']]);
+ assert.equal(parse(duplicate,entries,comments,url(9),9).ok,false);
+});
+
 test('source fetch retries when a text-only lineup left DOM unverified',()=>{
  assert.match(src,/if\(\(!wl\.ok\|\|wl\.lineSource!=='footerLineDOM'\|\|wl\.originVerified!==true\)&&entries\.length>=5\)/);
  assert.match(src,/searchParams\.set\('pageType','yoso'\)/);
