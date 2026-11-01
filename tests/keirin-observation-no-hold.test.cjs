@@ -85,8 +85,7 @@ test('simple UI re-enables simulation while preserving native formal safety',asy
   createElement(tag){const x=new Node();x.tagName=tag;return x;},
   addEventListener(type,fn){listeners[type]=fn;}
  };
- const ctx={document:doc,MutationObserver:class{observe(){}},setTimeout,queueMicrotask,
-  globalThis:null};
+ const ctx={document:doc,MutationObserver:class{observe(){}},setTimeout,queueMicrotask};
  vm.createContext(ctx);
  ctx.RaceBookmark1123={parse(){return{races:[race]}}};
  vm.runInContext(source,ctx);
