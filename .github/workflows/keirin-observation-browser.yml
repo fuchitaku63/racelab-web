@@ -1,0 +1,49 @@
+name: RaceLab Chromium end-to-end regression
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'addons/**'
+      - 'tests/browser.cjs'
+      - 'tests/keirin-observation-no-hold.test.cjs'
+      - '.github/workflows/keirin-observation-browser.yml'
+jobs:
+  chromium-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright runner
+        run: npm install --no-save --no-package-lock playwright
+      - name: Inspect browser availability
+        run: |
+          command -v google-chrome || true
+          command -v chromium || true
+      - name: Browser integration with native RaceLab and iPhone JSON
+        run: node tests/browser.cjs
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+
+  webkit-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright WebKit and required libraries
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps webkit
+      - name: Browser integration in WebKit
+        run: node tests/browser.cjs
+        env:
+          RACELAB_BROWSER: webkit
