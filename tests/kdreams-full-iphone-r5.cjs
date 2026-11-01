@@ -26,7 +26,9 @@ const expectedLine='9-3-7 / 2-4 / 1-5-6 / 8';
   await page.locator('#v1124-race-go').click();
   await page.locator('#v1124-output-overlay textarea[aria-label="RaceLab用JSONデータ"]').waitFor({timeout:45000});
   const raw=await page.locator('#v1124-output-overlay textarea[aria-label="RaceLab用JSONデータ"]').inputValue();
-  const parsed=JSON.parse(raw);
+  const i=raw.indexOf('{'),j=raw.lastIndexOf('}');
+  if(i<0||j<i)throw Error('bookmarklet output has no JSON payload');
+  const parsed=JSON.parse(raw.slice(i,j+1));
   const r=parsed.races?.[0];
   const result={browser:BROWSER,http:res?.status(),buildId:parsed.buildId,
    raceCount:parsed.raceCount,race:r?.race,entryCount:r?.entryCount,
