@@ -13,17 +13,17 @@ const ctx={document:doc,TextEncoder,RaceImportCore:{candidateValidate:x=>x},Race
 vm.createContext(ctx);vm.runInContext(js,ctx);vm.runInContext(bm[1],ctx);
 const convert=ctx.RaceLabIphoneReportAdapter.convertReport;
 function report(rev='r3',n=9){
- const parts=['【競輪出走情報 iPhone抽出版】','識別: iphone-easy-20261031-'+rev,
+ const parts=['【競輪出走情報 iPhone抽出版】','識別: '+(rev==='r5'?'iphone-easy-20261101-r5':'iphone-easy-20261031-'+rev),
   '対象: 防府｜指定 9R｜読み込み 1/1R','重要: 出走表とコメントを保持します。','',
   '【9R】 防府競輪 レース詳細 2026年10月31日','出走人数: '+n,
   '参考ライン: 5-1-9 / 2-7-8 / 3-4-6','ライン確認: 参考情報・正式ラインは要照合'];
  for(let k=1;k<=n;k++)parts.push(k+'番 架空選手'+k+' 得点'+(90+k)+'.25｜B'+k+' S0 逃1 捲2 差3 マ0｜コメント: '+(k===2?'架空選手1さんへ':'自力。'));
  return parts.join('\n');
 }
-test('r1,r2,r3,r4 iPhone short reports are accepted as editable source information',()=>{
- for(const ver of ['r1','r2','r3','r4']){
+test('r1-r5 iPhone short reports are accepted as editable source information',()=>{
+ for(const ver of ['r1','r2','r3','r4','r5']){
   const out=JSON.parse(convert(report(ver)));
-  assert.equal(out.buildId,'iphone-easy-20261031-'+ver);
+  assert.equal(out.buildId,ver==='r5'?'iphone-easy-20261101-r5':'iphone-easy-20261031-'+ver);
   assert.equal(out.version,'11.24-dom-verified-no-odds-strict');
   assert.equal(out.raceCount,1);
   assert.equal(out.races[0].entries.length,9);
