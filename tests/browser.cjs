@@ -10,6 +10,7 @@ try{b=await (BROWSER==='webkit'?pw.webkit:pw.chromium).launch(BROWSER==='webkit'
 async function paste(p){const txt='【独自架空 TEST_FIXTURE】\n'+JSON.stringify(p);if(BROWSER==='webkit')await page.fill('#keirinPaste',txt);else{await page.evaluate(value=>navigator.clipboard.writeText(value),txt);await page.locator('#keirinPaste').click();await page.keyboard.press('Control+A');await page.keyboard.press('Control+V');}await page.click('#keirinImport');}
 await paste(payload(V23));assert.equal(await page.locator('#keirinRankRows tr').count(),7);assert.equal(await page.locator('#keirinError').innerText(),'');await page.selectOption('#keirinRuns','10000');await page.click('#keirinSimulate');await page.waitForFunction(()=>document.querySelector('#keirinProgress').textContent.startsWith('完了：'),null,{timeout:30000});assert.equal(await page.locator('#keirinScenarios .hl-scenario').count(),3);console.log('PASS 実ブラウザ・V11.23クリップボード貼付と試算');
 await paste(payload());assert.equal(await page.locator('#keirinRankRows tr').count(),7);assert.match(await page.locator('#keirinRankRows').innerText(),/架空選手甲さんへ/);assert.equal(await page.inputValue('#keirinLine'),'1-2-3 / 4-5 / 6-7');assert.equal(await page.locator('#keirinSimulate').isEnabled(),true);await page.selectOption('#keirinRuns','10000');await page.click('#keirinSimulate');await page.waitForFunction(()=>document.querySelector('#keirinProgress').textContent.startsWith('完了：'),null,{timeout:30000});assert.equal(await page.locator('#keirinScenarios .hl-scenario').count(),3);console.log('PASS V11.24貼付・コメント・ライン・試算');
+console.log('FORMATION_NATIVE_DOM',JSON.stringify(await page.locator('#keirinScenarios').evaluate(x=>x.outerHTML.slice(0,9500))));
 await page.fill('#keirinLine','1-3-2 / 4-5 / 6-7');await page.click('#keirinSimulate');assert.match(await page.locator('#keirinError').innerText(),/HOLD.*不一致/);assert.equal(await page.locator('#keirinScenarios').innerText(),'');assert.equal(await page.locator('#keirinHoleFocus').isHidden(),true);console.log('PASS 入力ライン変更時の不一致HOLD・旧結果消去');
 for(const [name,change] of [['DOM未確認',r=>{r.lineVerification.domConfirmed=false}],['ジカ',r=>{r.comments['2']='ジカで競る'}],['番手競り',r=>{r.comments['2']='番手競り'}],['ライン不一致',r=>{r.line='1-3-2 / 4-5 / 6-7'}],['コメントと別ライン',r=>{r.comments['2']='4番車へ'}]]){
  await paste(casePayload(change));
@@ -34,6 +35,7 @@ for(const [name,change] of [['DOM未確認',r=>{r.lineVerification.domConfirmed=
  for(const b of bounds){assert.ok(b.right<=b.viewport+2&&b.left>=-2,'mobile result card must fit in viewport: '+JSON.stringify(b));assert.ok(b.hasReference);}
  assert.match(await page.locator('#keirinLinePreview').innerText(),/参考ライン・未確認/);
  assert.match(await page.locator('#keirinProgress').innerText(),/ライン補正なし/);
+ if(name==='DOM未確認')console.log('FORMATION_REFER_DOM',JSON.stringify(await page.locator('#keirinScenarios').evaluate(x=>x.outerHTML.slice(0,7000))));
 }console.log('PASS DOM未確認・競りでもライン補正なし参考試算。元情報を維持');
 const mult=payload();const second=casePayload(r=>{r.lineVerification.domConfirmed=false}).races[0];second.race='2';mult.races.push(second);mult.raceCount=2;
 await paste(mult);
