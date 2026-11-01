@@ -268,7 +268,7 @@ const verifyYosoLineSection=(yosoDoc,entries,comments,sourceURL,raceNo)=>{
   diagnostics,originVerified:true,warnings:[]};
 };
 const fetchWithTimeout=async url=>{const ctrl=new AbortController();const id=setTimeout(()=>ctrl.abort(),9000);try{const r=await fetch(url,{credentials:'include',signal:ctrl.signal});if(!r.ok)throw Error('HTTP '+r.status);const actual=new URL(r.url||url,location.href),expected=new URL(url,location.href);if(actual.origin!==expected.origin||actual.pathname.replace(/\/$/,'')!==expected.pathname.replace(/\/$/,''))throw Error('取得先レースURLが不一致');return await r.text()}finally{clearTimeout(id)}};const pick=async url=>{let doc;if(url.split('?')[0]===location.href.split('?')[0].split('#')[0])doc=document;else{const html=await fetchWithTimeout(url);doc=new DOMParser().parseFromString(html,'text/html')}let rawText=doc.body?.innerText||doc.body?.textContent||'';let text=clean(rawText);let tables=tablesOf(doc);let oddsRawText='',oddsTables=[];const entRes=getEntries(tables);const entries=entRes.entries;const comments=getComments(tables,entries);const seq=getLineSeq(tables);const seg=segOf(url);const inf=infoOf(seg)||{};let line='',lineSource='none',manualLineRequired=true,lineGroups=[],commentStrictWarnings=[];let wl=getWrittenLineGroups(doc,tables,entries,comments,inf.place,url);
-if(!wl.ok&&entries.length>=5){
+if((!wl.ok||wl.lineSource!=='footerLineDOM'||wl.originVerified!==true)&&entries.length>=5){
  const yosoURL=new URL(url,location.href);yosoURL.searchParams.set('pageType','yoso');
  try{
   const yosoHTML=await fetchWithTimeout(yosoURL.href);
