@@ -19,8 +19,9 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
  const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
  let success=0,checked=0;
  try{
-  for(const race of [9,12]){
-   const url='https://keirin.kdreams.jp/hofu/racedetail/63202610310100'+String(race).padStart(2,'0')+'/?pageType=yoso';
+  for(const spec of [{race:9,id:'6320261031010009'},{race:12,id:'6320261031010012'},{race:6,id:'6320261031020006'}]){
+   const {race,id}=spec;
+   const url='https://keirin.kdreams.jp/hofu/racedetail/'+id+'/?pageType=yoso';
    const page=await browser.newPage({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1'});
    try{
     const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:25000});
@@ -58,7 +59,7 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
      race,http:response?.status(),title:info.title,
      markupCount:info.markupCount,innerLength:info.inner.length,rawLength:info.raw.length,
      example:section.slice(0,230),recognized:result.ok,line:result.line||null,
-     diagnostics:result.diagnostics,footerSectionCount:info.footerSections.length,expectedMatches:result.line===({9:'5-1-9 / 2-7-8 / 3-4-6',12:'1-4 / 2-8-7 / 3 / 5-6 / 9'}[race])
+     diagnostics:result.diagnostics,footerSectionCount:info.footerSections.length,expectedMatches:race===6?null:result.line===({9:'5-1-9 / 2-7-8 / 3-4-6',12:'1-4 / 2-8-7 / 3 / 5-6 / 9'}[race])
     }));
    }catch(e){console.log('LIVE_KDREAMS_UNAVAILABLE',race,String(e).slice(0,250));}
    await page.close();
