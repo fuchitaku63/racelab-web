@@ -29,7 +29,8 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
      title:document.title,
      inner:document.body?.innerText||'',
      raw:document.body?.textContent||'',
-     markupCount:document.querySelectorAll('dl.racecard_footer-contents,.racecard_footer-contents,[class*="racecard_footer"]').length
+     markupCount:document.querySelectorAll('dl.racecard_footer-contents,.racecard_footer-contents,[class*="racecard_footer"]').length,
+     footerHTML:[...document.querySelectorAll('dl.racecard_footer-contents,.racecard_footer-contents,[class*="racecard_footer"]')].slice(0,2).map(e=>({tag:e.tagName,className:e.className,html:e.outerHTML.slice(0,16000)}))
     }));
     const body={textContent:info.raw};
     const result=fn({title:info.title,body},entries,{},url,race);
@@ -40,7 +41,7 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
      race,http:response?.status(),title:info.title,
      markupCount:info.markupCount,innerLength:info.inner.length,rawLength:info.raw.length,
      example:section.slice(0,230),recognized:result.ok,line:result.line||null,
-     diagnostics:result.diagnostics
+     diagnostics:result.diagnostics,footerHTML:info.footerHTML
     }));
    }catch(e){console.log('LIVE_KDREAMS_UNAVAILABLE',race,String(e).slice(0,250));}
    await page.close();
