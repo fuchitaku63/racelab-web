@@ -43,7 +43,7 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
         if(q==='dt')return{textContent:section.heading};
         if(q==='dd .one_line_info')return{children:section.children.map(el=>({
          textContent:el.textContent,
-         classList:{contains:c=>el.className.split(/\\s+/).includes(c)}
+         classList:{contains:c=>el.className.split(/\s+/).includes(c)}
         }))};
         return null;
        }
