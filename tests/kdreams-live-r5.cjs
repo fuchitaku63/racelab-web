@@ -30,10 +30,27 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
      inner:document.body?.innerText||'',
      raw:document.body?.textContent||'',
      markupCount:document.querySelectorAll('dl.racecard_footer-contents,.racecard_footer-contents,[class*="racecard_footer"]').length,
-     footerHTML:[...document.querySelectorAll('dl.racecard_footer-contents,.racecard_footer-contents,[class*="racecard_footer"]')].slice(0,2).map(e=>({tag:e.tagName,className:e.className,html:e.outerHTML.slice(0,16000)}))
+     footerSections:[...document.querySelectorAll('dl.racecard_footer-contents')].map(e=>({
+      heading:e.querySelector('dt')?.textContent||'',
+      children:[...(e.querySelector('dd .one_line_info')?.children||[])].map(el=>({className:el.className,textContent:el.textContent}))
+     }))
     }));
-    const body={textContent:info.raw};
-    const result=fn({title:info.title,body},entries,{},url,race);
+    const doc={title:info.title,body:{textContent:info.raw},
+     querySelectorAll(selector){
+      if(selector!=='dl.racecard_footer-contents')return[];
+      return info.footerSections.map(section=>({
+       querySelector(q){
+        if(q==='dt')return{textContent:section.heading};
+        if(q==='dd .one_line_info')return{children:section.children.map(el=>({
+         textContent:el.textContent,
+         classList:{contains:c=>el.className.split(/\\s+/).includes(c)}
+        }))};
+        return null;
+       }
+      }));
+     }
+    };
+    const result=fn(doc,entries,{},url,race);
     checked++;
     if(result.ok)success++;
     const section=info.inner.match(/並び予想[\s\S]{0,200}/)?.[0]||'NOT_FOUND';
@@ -41,7 +58,7 @@ const entries=Array.from({length:9},(_,i)=>({car:String(i+1),name:'検証車'+(i
      race,http:response?.status(),title:info.title,
      markupCount:info.markupCount,innerLength:info.inner.length,rawLength:info.raw.length,
      example:section.slice(0,230),recognized:result.ok,line:result.line||null,
-     diagnostics:result.diagnostics,footerHTML:info.footerHTML
+     diagnostics:result.diagnostics,footerSectionCount:info.footerSections.length,expectedMatches:result.line===({9:'5-1-9 / 2-7-8 / 3-4-6',12:'1-4 / 2-8-7 / 3 / 5-6 / 9'}[race])
     }));
    }catch(e){console.log('LIVE_KDREAMS_UNAVAILABLE',race,String(e).slice(0,250));}
    await page.close();
