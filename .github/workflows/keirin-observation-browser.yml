@@ -28,6 +28,9 @@ jobs:
         run: node tests/browser.cjs
         env:
           CHROMIUM_PATH: /usr/bin/google-chrome
+      - name: Diagnose Kdreams real published lineup (non-blocking)
+        run: node tests/kdreams-live-r5.cjs
+        continue-on-error: true
 
   webkit-e2e:
     runs-on: ubuntu-latest
