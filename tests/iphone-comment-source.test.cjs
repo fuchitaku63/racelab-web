@@ -49,5 +49,5 @@ test('line checks and source verification remain unchanged',()=>{
  assert.match(src,/const domConfirmed=lineSource==='footerLineDOM'&&wl\.originVerified===true;/);
  assert.match(src,/const comments=getComments\(tables,entries\)/);
  assert.match(src,/getWrittenLineGroups\(yosoDoc,tablesOf\(yosoDoc\),entries,comments/);
- assert.match(src,/const BUILD_ID='iphone-easy-20261031-r4'/);
+ assert.match(src,/const BUILD_ID='iphone-easy-20261101-r5'/);
 });
