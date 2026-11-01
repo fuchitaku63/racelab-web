@@ -40,6 +40,8 @@ await page.evaluate(()=>{
 await page.locator('#keirinFormation details').first().locator('button').click();
 await page.waitForFunction(()=>window.__formationCopied.includes('3連単フォーメーション'),null,{timeout:5000});
 assert.match(await page.evaluate(()=>window.__formationCopied),/合計 \d+点/);
+// Remove the copy-test shim before subsequent clipboard-driven race imports.
+await page.evaluate(()=>{delete navigator.clipboard;});
 console.log('PASS 通常ライン確定試算から本線/対抗/穴の厳密フォーメーションとコピー');
 
 await page.fill('#keirinLine','1-3-2 / 4-5 / 6-7');await page.click('#keirinSimulate');assert.match(await page.locator('#keirinError').innerText(),/HOLD.*不一致/);assert.equal(await page.locator('#keirinScenarios').innerText(),'');assert.equal(await page.locator('#keirinHoleFocus').isHidden(),true);await page.waitForFunction(()=>!document.getElementById('keirinFormation'));
