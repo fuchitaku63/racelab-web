@@ -1,4 +1,4 @@
-javascript:(async()=>{const MODE='iphone';const VERSION='11.24-dom-verified-no-odds-strict';const EXTRACTOR_REVISION='2026-10-31-scoped-dom-1';const BUILD_ID='iphone-easy-20261031-r4';const sleep=ms=>new Promise(r=>setTimeout(r,ms));const clean=s=>String(s??'').normalize('NFKC').replace(/\u00a0/g,' ').replace(/[ \t\r\n]+/g,' ').trim();const esc=s=>String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));const num=x=>{const n=parseFloat(String(x??'').replace(/,/g,''));return Number.isFinite(n)?n:0};const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));const round=(x,d=4)=>Number.isFinite(x)?+x.toFixed(d):null;const segOf=u=>{try{const x=new URL(u,location.href);const m=x.pathname.match(/\/racedetail\/(\d{16})\/?/);return m?m[1]:''}catch(e){return''}};const infoOf=seg=>{const m=String(seg).match(/^(\d{2})(\d{8})(\d{2})(\d{4})$/);return m?{seg,place:m[1],start:m[2],day:m[3],race:+m[4]}:null};const base=infoOf(segOf(location.href));if(!base){alert('V11はKドリームスのレース詳細ページで実行してください');return}const parseSpec=s=>{const out=[];clean(s).replace(/R/gi,'').split(/[,\s、]+/).filter(Boolean).forEach(p=>{const m=p.match(/^(\d{1,2})-(\d{1,2})$/);if(m){for(let i=+m[1];i<=+m[2];i++)out.push(i)}else if(/^\d{1,2}$/.test(p))out.push(+p)});return[...new Set(out)].filter(n=>n>=1&&n<=12).sort((a,b)=>a-b)};const chooseIphoneRaces=()=>new Promise(resolve=>{
+javascript:(async()=>{const MODE='iphone';const VERSION='11.24-dom-verified-no-odds-strict';const EXTRACTOR_REVISION='2026-11-01-span-separated-dom-2';const BUILD_ID='iphone-easy-20261101-r5';const sleep=ms=>new Promise(r=>setTimeout(r,ms));const clean=s=>String(s??'').normalize('NFKC').replace(/\u00a0/g,' ').replace(/[ \t\r\n]+/g,' ').trim();const esc=s=>String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));const num=x=>{const n=parseFloat(String(x??'').replace(/,/g,''));return Number.isFinite(n)?n:0};const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));const round=(x,d=4)=>Number.isFinite(x)?+x.toFixed(d):null;const segOf=u=>{try{const x=new URL(u,location.href);const m=x.pathname.match(/\/racedetail\/(\d{16})\/?/);return m?m[1]:''}catch(e){return''}};const infoOf=seg=>{const m=String(seg).match(/^(\d{2})(\d{8})(\d{2})(\d{4})$/);return m?{seg,place:m[1],start:m[2],day:m[3],race:+m[4]}:null};const base=infoOf(segOf(location.href));if(!base){alert('V11はKドリームスのレース詳細ページで実行してください');return}const parseSpec=s=>{const out=[];clean(s).replace(/R/gi,'').split(/[,\s、]+/).filter(Boolean).forEach(p=>{const m=p.match(/^(\d{1,2})-(\d{1,2})$/);if(m){for(let i=+m[1];i<=+m[2];i++)out.push(i)}else if(/^\d{1,2}$/.test(p))out.push(+p)});return[...new Set(out)].filter(n=>n>=1&&n<=12).sort((a,b)=>a-b)};const chooseIphoneRaces=()=>new Promise(resolve=>{
  const box=document.createElement('div');box.id='v1124-race-picker';box.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#fff;color:#111;padding:20px;overflow:auto;font:16px sans-serif;';
  const heading=document.createElement('h2');heading.textContent='抽出するレースを選択';box.appendChild(heading);
  const note=document.createElement('p');note.textContent='一度に読み込むレースを選んでください。';box.appendChild(note);
@@ -81,9 +81,83 @@ const parseFooterLineCandidate=(s,entries,comments={})=>{
  return groups;
 };
 
+
+// The published Kdreams 並び予想 supplies a complete car + role sequence.
+// Segmenting by published role markers avoids inferring the order from riders'
+// comments (which may be absent, truncated, or historically out of date).
+const parsePublishedRoleLine=(raw,entries)=>{
+ const cars=entries.map(e=>String(e.car));
+ if(cars.length<5||new Set(cars).size!==cars.length)return null;
+ let t=String(raw||'').normalize('NFKC').replace(/\u00a0/g,' ');
+ if(!/[←⇐]/.test(t)||/競り|ジカ|直付け|直競り/.test(t))return null;
+ t=t.slice(t.search(/[←⇐]/)+1);
+ const tokens=Array.from(t.matchAll(/([1-9])\s*(押え先|押さえ先|自力自在|追い上げ|追い込み|三番手|3番手|先行|追込|自在|自力|捲り|まくり|捲|逃げ|逃|番手|マーク|追上|単騎|一人|総力|何でも)/g),m=>({car:m[1],role:m[2]}));
+ if(tokens.length!==cars.length||new Set(tokens.map(x=>x.car)).size!==cars.length||
+    cars.some(c=>!tokens.some(x=>x.car===c)))return null;
+ const starters=/^(?:押え先|押さえ先|自力自在|先行|自在|自力|捲り|まくり|捲|逃げ|逃|総力|何でも)$/;
+ const solo=/^(?:追上|追い上げ|単騎|一人)$/;
+ const groups=[];let active=[];
+ for(const {car,role} of tokens){
+  if(solo.test(role)){
+   if(active.length)groups.push(active);
+   groups.push([car]);active=[];continue;
+  }
+  if(starters.test(role)&&active.length){groups.push(active);active=[];}
+  active.push(car);
+ }
+ if(active.length)groups.push(active);
+ return lineGroupCheck(groups,entries).ok?groups:null;
+};
+
+// Kdreams live footer: a .num.n{car} span for every rider and a .space span
+// at each published line break. This is stronger evidence than role text.
+const parseKdreamsFooterDOM=(doc,entries)=>{
+ const diagnostics=['KDR_DOM_FOOTER_ATTEMPTED=1'],found=[];
+ const feet=Array.from(doc?.querySelectorAll?.('dl.racecard_footer-contents')||[]);
+ diagnostics.push('KDR_FOOTER_COUNT='+feet.length);
+ for(const el of feet){
+  if(!/^並び予想\s*[:：]?$/.test(clean(el.querySelector?.('dt')?.textContent||'')))continue;
+  const container=el.querySelector?.('dd .one_line_info');
+  if(!container)continue;
+  let groups=[],current=[],arrows=0,invalid=false;
+  for(const node of Array.from(container.children||[])){
+   const has=cls=>node.classList?.contains?.(cls)===true;
+   if(has('arrow')){arrows++;if(clean(node.textContent)!=='←')invalid=true;continue;}
+   if(has('space')){if(clean(node.textContent))invalid=true;if(current.length){groups.push(current);current=[];}continue;}
+   if(has('num')){
+    const car=clean(node.textContent);
+    if(!/^[1-9]$/.test(car)||!has('n'+car)){invalid=true;break;}
+    current.push(car);continue;
+   }
+   if(clean(node.textContent))invalid=true;
+  }
+  if(current.length)groups.push(current);
+  const valid=lineGroupCheck(groups,entries);
+  if(invalid||arrows!==1||!valid.ok){
+   diagnostics.push('KDR_FOOTER_INVALID='+[invalid?'UNKNOWN_NODE':'',arrows!==1?'ARROW':'',...valid.reasons].filter(Boolean).join(','));
+   continue;
+  }
+  const line=groups.map(g=>g.join('-')).join(' / ');
+  found.push({lineGroups:groups,line,raw:line,source:'footerLineDOM:one_line_info_num_space'});
+ }
+ const distinct=new Map(found.map(x=>[x.line,x]));
+ diagnostics.push('KDR_FOOTER_VALID='+found.length,'KDR_FOOTER_DISTINCT='+distinct.size);
+ if(distinct.size===1)return{ok:true,...[...distinct.values()][0],diagnostics};
+ if(distinct.size>1)return{ok:false,conflict:true,diagnostics:diagnostics.concat('KDR_FOOTER_CONFLICT')};
+ return{ok:false,diagnostics};
+};
 const trustedRaceURL=(url)=>{try{const u=new URL(url,location.href),base=new URL(location.href);return u.protocol==='https:'&&u.hostname==='keirin.kdreams.jp'&&u.origin===base.origin&&/\/racedetail\/\d{16}\/?$/.test(u.pathname)}catch{return false}};
 const getWrittenLineGroups=(doc,tables,entries,comments={},place='',sourceURL='')=>{
  const candidates=[],diagnostics=[],observations=[],originVerified=trustedRaceURL(sourceURL),numbers=entries.map(e=>String(e.car));
+ const parsedFooter=parseKdreamsFooterDOM(doc,entries);
+ if(originVerified&&parsedFooter.ok)return{
+  ok:true,lineGroups:parsedFooter.lineGroups,line:parsedFooter.line,
+  lineSeq:parsedFooter.lineGroups.flat().join('-'),
+  lineSource:'footerLineDOM',source:parsedFooter.source,
+  raw:parsedFooter.raw,warnings:[],diagnostics:parsedFooter.diagnostics,
+  originVerified:true};
+ if(parsedFooter.conflict)return{
+  ok:false,reason:'掲載ラインのDOM候補が不一致',diagnostics:parsedFooter.diagnostics,originVerified};
  let headingCount=0;
  const tval=e=>clean(e?.innerText||e?.textContent||'');
  // Mobile racecard lineup markers may be encoded in DOM attributes.
@@ -110,7 +184,7 @@ const getWrittenLineGroups=(doc,tables,entries,comments={},place='',sourceURL=''
   if(bad.test(t)){observations.push({source,classification:'UNRELATED_CONTENT'});return;}
   const roles=Array.from(t.matchAll(roleRx),x=>({car:x[1],role:x[2]}));
   if(footerRole){const ids=roles.map(x=>x.car),unique=new Set(ids);observations.push({source,roles,missing:numbers.filter(x=>!unique.has(x)),duplicate:ids.filter((x,i)=>ids.indexOf(x)!==i),classification:roles.length?'ROLE_SEQUENCE':'NO_ROLE_SEQUENCE'});}
-  const g=parseFooterLineCandidate(t,entries,comments,place);
+  const g=parsePublishedRoleLine(t,entries)||parseFooterLineCandidate(t,entries,comments,place);
   if(g){candidates.push({lineGroups:g,source,priority,raw:t});return;}
   if(footerRole)diagnostics.push(source+':roleSequenceUnrecognized');
   if(/\d[-－\/]\d/.test(t))for(const v of t.match(/[1-9][1-9\-\/／｜|・,，、\s]{3,40}[1-9]/g)||[]){const gg=parseWrittenLineCandidate(v,entries);if(gg)candidates.push({lineGroups:gg,source,priority:priority+2,raw:v});}
@@ -200,39 +274,57 @@ const verifyYosoLineSection=(yosoDoc,entries,comments,sourceURL,raceNo)=>{
  const diagnostics=['YOSO_FALLBACK_ATTEMPTED=1'];
  if(!trustedRaceURL(sourceURL)||new URL(sourceURL,location.href).searchParams.get('pageType')!=='yoso')
   return{ok:false,diagnostics:diagnostics.concat('YOSO_ORIGIN_OR_QUERY_INVALID')};
- const m=String(yosoDoc.title||'').normalize('NFKC').match(/(?:^|\s)(\d{1,2})R\b/);
+ const sourceRace=infoOf(segOf(sourceURL))?.race;
+ if(Number(sourceRace)!==Number(raceNo))
+  return{ok:false,diagnostics:diagnostics.concat('YOSO_URL_RACE_MISMATCH')};
+ const title=String(yosoDoc.title||'').normalize('NFKC');
+ const m=title.match(/(?:^|\s)(\d{1,2})R\b/);
  if(!m||Number(m[1])!==Number(raceNo))
   return{ok:false,diagnostics:diagnostics.concat('YOSO_TITLE_RACE_MISMATCH')};
- const visibleBody=yosoDoc.body?.cloneNode?.(true)||yosoDoc.body;
- visibleBody?.querySelectorAll?.('script,style,noscript,template').forEach(el=>el.remove());
- const body=String(visibleBody?.innerText||visibleBody?.textContent||'').normalize('NFKC');
+ const structured=parseKdreamsFooterDOM(yosoDoc,entries);
+ diagnostics.push(...structured.diagnostics);
+ if(structured.ok)return{
+  ok:true,lineGroups:structured.lineGroups,line:structured.line,
+  lineSeq:structured.lineGroups.flat().join('-'),
+  lineSource:'footerLineDOM',source:structured.source,
+  raw:structured.raw,diagnostics:diagnostics.concat('YOSO_STRUCTURED_DOM_VERIFIED=1'),
+  originVerified:true,warnings:[]};
+ if(structured.conflict)return{ok:false,diagnostics:diagnostics.concat('YOSO_FOOTER_CONFLICT')};
+ const bodyNode=yosoDoc.body?.cloneNode?.(true)||yosoDoc.body;
+ bodyNode?.querySelectorAll?.('script,style,noscript,template').forEach(el=>el.remove());
+ const body=String(bodyNode?.innerText||bodyNode?.textContent||'').normalize('NFKC');
+ // The mobile+desktop markup can contain multiple headings; accept duplicate
+ // identical lineups, never simply demand one heading or guess between conflicts.
  const headings=[...body.matchAll(/並び予想/g)];
  diagnostics.push('YOSO_HEADING_COUNT='+headings.length);
- if(headings.length!==1)return{ok:false,diagnostics:diagnostics.concat('YOSO_HEADING_AMBIGUOUS')};
- const tail=body.slice(headings[0].index+4);
- const end=tail.search(/レース評|出走表|選手コメント|オッズ|発売票数|狙い目/);
- if(end<0||end>1000)return{ok:false,diagnostics:diagnostics.concat('YOSO_SECTION_UNBOUNDED')};
- const section=clean(tail.slice(0,end));
- if(section.length>500||section.length<20||!/[←⇐]/.test(section))
-  return{ok:false,diagnostics:diagnostics.concat('YOSO_SECTION_SHAPE_INVALID')};
- const roles=Array.from(section.matchAll(/([1-9])\s*(押え先|押さえ先|自力自在|追い上げ|追い込み|競り|三番手|3番手|先行|追込|自在|自力|捲り|まくり|捲|逃げ|逃|番手|マーク|追上|単騎|一人|総力|何でも)/g),m=>m[1]);
- const cars=entries.map(e=>String(e.car));
- diagnostics.push('YOSO_ROLE_COUNT='+roles.length);
- if(roles.length!==cars.length||new Set(roles).size!==cars.length||cars.some(c=>!roles.includes(c)))
-  return{ok:false,diagnostics:diagnostics.concat('YOSO_ROLE_CARS_MISMATCH')};
- const lineGroups=parseFooterLineCandidate(section,entries,comments);
- const check=lineGroups&&lineGroupCheck(lineGroups,entries);
- if(!check?.ok)return{ok:false,diagnostics:diagnostics.concat('YOSO_GROUP_CHECK_FAILED')};
- if(/競り|ジカ|直付け|直競り/.test(section))
-  return{ok:false,diagnostics:diagnostics.concat('YOSO_CONTESTED_LINE')};
+ const found=[];
+ for(const h of headings.slice(0,25)){
+  const tail=body.slice(h.index+'並び予想'.length);
+  const end=tail.search(/レース評|予想担当記者|出走表|選手コメント|オッズ|発売票数|狙い目/);
+  if(end<0||end>1200)continue;
+  const section=tail.slice(0,end);
+  if(section.length>900)continue;
+  const groups=parsePublishedRoleLine(section,entries);
+  if(!groups)continue;
+  const line=groups.map(g=>g.join('-')).join(' / ');
+  found.push({line,groups,raw:clean(section)});
+ }
+ const unique=new Map(found.map(x=>[x.line,x]));
+ diagnostics.push('YOSO_VALID_CANDIDATES='+found.length);
+ diagnostics.push('YOSO_DISTINCT_LINES='+unique.size);
+ if(unique.size!==1){
+  diagnostics.push(unique.size>1?'YOSO_LINE_CONFLICT':'YOSO_ROLE_SEQUENCE_NOT_FOUND');
+  return{ok:false,diagnostics};
+ }
+ const entry=[...unique.values()][0];
  diagnostics.push('YOSO_ROLE_SECTION_VERIFIED=1');
- return{ok:true,lineGroups,line:lineGroups.map(g=>g.join('-')).join(' / '),
-  lineSeq:lineGroups.flat().join('-'),lineSource:'footerLineDOM',
-  source:'footerLineDOM:yoso-page-role-section',raw:section,
+ return{ok:true,lineGroups:entry.groups,line:entry.line,
+  lineSeq:entry.groups.flat().join('-'),lineSource:'footerLineDOM',
+  source:'footerLineDOM:yoso-published-role-sequence',raw:entry.raw,
   diagnostics,originVerified:true,warnings:[]};
 };
 const fetchWithTimeout=async url=>{const ctrl=new AbortController();const id=setTimeout(()=>ctrl.abort(),9000);try{const r=await fetch(url,{credentials:'include',signal:ctrl.signal});if(!r.ok)throw Error('HTTP '+r.status);const actual=new URL(r.url||url,location.href),expected=new URL(url,location.href);if(actual.origin!==expected.origin||actual.pathname.replace(/\/$/,'')!==expected.pathname.replace(/\/$/,''))throw Error('取得先レースURLが不一致');return await r.text()}finally{clearTimeout(id)}};const pick=async url=>{let doc;if(url.split('?')[0]===location.href.split('?')[0].split('#')[0])doc=document;else{const html=await fetchWithTimeout(url);doc=new DOMParser().parseFromString(html,'text/html')}let rawText=doc.body?.innerText||doc.body?.textContent||'';let text=clean(rawText);let tables=tablesOf(doc);let oddsRawText='',oddsTables=[];const entRes=getEntries(tables);const entries=entRes.entries;const comments=getComments(tables,entries);const seq=getLineSeq(tables);const seg=segOf(url);const inf=infoOf(seg)||{};let line='',lineSource='none',manualLineRequired=true,lineGroups=[],commentStrictWarnings=[];let wl=getWrittenLineGroups(doc,tables,entries,comments,inf.place,url);
-if(!wl.ok&&entries.length>=5){
+if((!wl.ok||wl.lineSource!=='footerLineDOM'||wl.originVerified!==true)&&entries.length>=5){
  const yosoURL=new URL(url,location.href);yosoURL.searchParams.set('pageType','yoso');
  try{
   const yosoHTML=await fetchWithTimeout(yosoURL.href);

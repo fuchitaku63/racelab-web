@@ -73,26 +73,54 @@ const el=(tag,label,cls)=>{const n=document.createElement(tag);
 function showScenario(box,part){
  const info=SCENARIOS.find(s=>s.key===part.scenario);
  const card=el('article',undefined,'hl-scenario');
+ card.style.cssText='width:100%;max-width:100%;min-width:0;box-sizing:border-box;margin-bottom:14px;overflow:hidden';
  card.append(el('h3',info.title));
- const tbl=el('table',undefined,'hl-table'),thead=el('thead'),tr=el('tr');
- tr.append(el('th','3連単の組合せ'),el('th','モデル内出現頻度'));
- thead.append(tr);tbl.append(thead);
- const tbody=el('tbody');
+ const description=el('p','上位6組（モデル内の仮定計算）','hl-footnote');
+ card.append(description);
+ // No hl-table here: the shared table CSS has min-width:670px and creates
+ // a second screen-width column in iPhone Safari, separating % from results.
+ const list=el('ol');
+ list.style.cssText='list-style:none;margin:0;padding:0;width:100%;min-width:0';
  for(const item of part.top){
-  const row=el('tr');row.append(el('td',item.combination),
-   el('td',(item.frequency*100).toFixed(2)+'%'));tbody.append(row);
+  const li=el('li');
+  li.style.cssText='display:block;width:100%;box-sizing:border-box;padding:10px 2px;border-bottom:1px solid #34445b;overflow-wrap:anywhere';
+  const combination=el('div',item.combination,'hl-ticket');
+  combination.style.cssText='display:block;font-size:19px;font-weight:750';
+  const frequency=el('div','参考出現率 '+(item.frequency*100).toFixed(2)+'%（的中確率ではありません）','hl-footnote');
+  frequency.style.cssText='display:block;margin:3px 0 0;font-size:12px;line-height:1.6';
+  li.append(combination,frequency);list.append(li);
  }
- tbl.append(tbody);card.append(tbl);
- card.append(el('p','モデル内での参考頻度。的中確率・投資推奨ではありません。','hl-footnote'));
+ card.append(list);
  box.append(card);
 }
+function referenceLine(r){
+ if(!r)return{line:'',status:'未取得'};
+ const value=text(r.line||'').trim(),cars=new Set(r.entries.map(e=>String(e.number)));
+ const chunks=value.split('/').map(x=>x.trim()).filter(Boolean);
+ const groups=chunks.map(x=>x.split('-').map(y=>y.trim()).filter(Boolean));
+ const all=groups.flat();
+ const valid=all.length===cars.size&&new Set(all).size===cars.size&&
+  all.every(car=>cars.has(car)&&/^[1-9]$/.test(car));
+ if(valid)return{line:groups.map(g=>g.join('-')).join(' / '),
+  status:r.bookmarkSafety?.hold===true?'参考ライン・未確認':'Kドリームス掲載ライン（出所確認済み）'};
+ if(/競り|ジカ/.test(value))return{line:'競り・ジカ等の可能性あり',status:'編成未確認'};
+ return{line:'自動取得できませんでした',status:'未取得'};
+}
+function updateLinePreview(r){
+ const preview=$('keirinLinePreview');
+ if(!preview)return;
+ const info=referenceLine(r);
+ preview.textContent='読み込みライン：'+info.line+'　｜　'+info.status;
+ preview.style.cssText='display:block;max-width:100%;overflow-wrap:anywhere;margin:8px 0 12px;color:#9ee2bd;font-size:13px;line-height:1.6';
+}
 function clearOld(){
- const box=$('keirinScenarios');if(box)box.replaceChildren();
+ const box=$('keirinScenarios');if(box){box.replaceChildren();box.style.gridTemplateColumns='';}
  const focus=$('keirinHoleFocus');if(focus){focus.hidden=true;focus.replaceChildren();}
 }
 function sync(){
  const r=current(),button=$('keirinSimulate'),loaded=$('keirinLoaded');
  if(!r||!button||loaded?.hidden)return;
+ updateLinePreview(r);
  if(!needed(r)){
   if(buttonLabel&&button.textContent==='ラインなし参考試算')button.textContent=buttonLabel;
   return;
@@ -124,6 +152,7 @@ async function run(){
    output.push(result);
   }
   if(token!==revision)return;
+  box.style.gridTemplateColumns='minmax(0,1fr)';
   output.forEach(x=>showScenario(box,x));
   if(progress)progress.textContent='完了：'+runs.toLocaleString('ja-JP')+
    '回×3展開の未校正モデル試行。ライン補正なし・オッズなし。';
@@ -145,6 +174,12 @@ function setup(){
  const lab=$(ROOT),importBtn=$('keirinImport'),select=$('keirinSelect'),
  simulateBtn=$('keirinSimulate'),error=$('keirinError'),loaded=$('keirinLoaded');
  if(!lab||!importBtn||!select||!simulateBtn)return;
+ // Always show what was read, even when formal lineup verification is absent.
+ const input=$('keirinLine');
+ if(input?.parentElement?.insertAdjacentElement&&!$('keirinLinePreview')){
+  const preview=el('p',undefined,'hl-footnote');preview.id='keirinLinePreview';
+  input.parentElement.insertAdjacentElement('afterend',preview);
+ }
  const observer=new MutationObserver(()=>sync());
  if(error)observer.observe(error,{childList:true,characterData:true,subtree:true});
  if(loaded)observer.observe(loaded,{attributes:true,attributeFilter:['hidden']});
@@ -172,5 +207,5 @@ function setup(){
 if(document.readyState==='loading')
  document.addEventListener('DOMContentLoaded',setup,{once:true});
 else setup();
-globalThis.RaceLabKeirinObservation=Object.freeze({eligible,participants,simulate,acceptText});
+globalThis.RaceLabKeirinObservation=Object.freeze({eligible,participants,simulate,acceptText,referenceLine});
 })();

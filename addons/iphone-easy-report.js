@@ -11,7 +11,7 @@ function convertReport(input){
  const lines=input.replace(/\r\n?/g,'\n').split('\n').map(s=>s.trim());
  const m=lines.find(s=>s.startsWith('識別: '));
  const buildId=m?m.slice('識別: '.length).trim():'';
- if(!/^iphone-easy-20261031-r[1234]$/.test(buildId))throw Error('未対応のiPhone簡易レポートです');
+ if(!/^(?:iphone-easy-20261031-r[1234]|iphone-easy-20261101-r5)$/.test(buildId))throw Error('未対応のiPhone簡易レポートです');
  const current=[];let race=null,ref='iPhone簡易レポート貼付（元ページURLは未記録）';
  for(const line of lines){
   const h=line.match(/^【([1-9]|1[0-2])R】\s*(.+)$/);
