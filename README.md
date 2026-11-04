@@ -4,13 +4,15 @@
 
 iPhone: GitHub Pages のURLをSafariで開き、「共有」→「ホーム画面に追加」。初回はオンラインで約5MBの取得が必要です。オフライン動作にはService Workerのインストール成功が必要です。
 
-実際のレースPDF、入力履歴、認証情報、非公開ソースは収録していません。復元するアプリのSHA-256: 95937429ea7fe32251a1264171b252e7c3d9cdd8fe9578ddf01c8ea6b1ef78ca。配信上38分割していますが起動時にSHA-256を照合して復元します。
+実際のレースPDF、入力履歴、認証情報、非公開ソースは収録していません。復元するアプリのSHA-256: dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68。配信上38分割していますが起動時にSHA-256を照合して復元します。
 
 GitHub Pages: Settings → Pages → Build and deployment → Deploy from a branch → main / (root)。
 
 ## 競輪出走情報の受信
 
 出走情報の `11.23-core-auto-only-master-pattern-no-odds-line-reference-footer-boundary-fix` と `11.24-dom-verified-no-odds-strict` を受け付けます。V11.24は選手コメントと参考ラインを表示し、並び予想DOM未確認、競り・ジカ、構成やコメントとの不一致、検証情報の欠落時は情報を残して分析・試算をHOLDします。出力の申告は提供元や正式ラインの認証ではありません。オッズの取得・オッズ版の取込には対応していません。
+
+V11.25の既存開発候補 `11.25-master-hold-no-odds` と統合開発候補 `11.25-integrated-no-odds` も未確認資料として受け付けます。選手とコメントを表示し、車番・点数の整合を検査できた条件付きフォーメーションだけを「取込元の仮分析」として表示します。V11.25の統計列は実DOM照合前のため数値試算・正式化へ使わず、一部レースの取込エラーは他のレースから分離します。実際のKドリームス・iPhone実機・予測精度は未検証です。
 
 ## 開発時の検証
 

@@ -13,7 +13,7 @@ const input=['【競輪出走情報 iPhone抽出版】','識別: iphone-easy-202
  ...[['郡司 浩平',116.6,'自力。'],['太田 海也',123.5,'自力。'],['南 修二',114.71,'単騎で。'],['渡部 幸訓',114.42,'郡司君。'],['松本 貴治',118.64,'自力。'],['佐々木 豪',113.91,'松本さん。'],['清水 裕友',116.06,'岡山勢。'],['取鳥 雄吾',113.91,'太田君。'],['山口 拳矢',115.37,'自力。']].map(([name,score,comment],i)=>`${i+1}番 ${name} 得点${score}｜B0 S0 逃0 捲1 差1 マ0｜コメント: ${comment}`)].join('\n');
 test('app loader keeps exact original 38-part integrity hash and bundles adapter',()=>{
  assert.match(index,/COUNT=38, PREFIX/);
- assert.match(index,/EXPECTED='95937429ea7fe32251a1264171b252e7c3d9cdd8fe9578ddf01c8ea6b1ef78ca'/);
+ assert.match(index,/EXPECTED='dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68'/);
  assert.match(index,/hash!==EXPECTED/);
  const start=index.indexOf('  const reportAdapter=');
  const stop=index.indexOf(';\n  const bodyEnd=',start);

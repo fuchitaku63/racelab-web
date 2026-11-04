@@ -26,7 +26,7 @@ test('source and live-loader embed remain byte-for-byte equal',()=>{
  assert.ok(i>=0&&j>i);
  assert.equal(JSON.parse(loader.slice(i+'const keirinNoLineAdapter='.length,j)),source);
  assert.match(loader,/COUNT=38/);
- assert.match(loader,/EXPECTED='95937429ea7fe32251a1264171b252e7c3d9cdd8fe9578ddf01c8ea6b1ef78ca'/);
+ assert.match(loader,/EXPECTED='dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68'/);
  assert.match(loader,/reportAdapter.*keirinNoLineAdapter/);
 });
 test('unknown lineup is accepted for independent observational computation',()=>{
@@ -40,6 +40,10 @@ test('unknown lineup is accepted for independent observational computation',()=>
  assert.ok(one.top.every(p=>/^[1-9]-[1-9]-[1-9]$/.test(p.combination)));
  assert.ok(one.top.every(p=>p.frequency>=0&&p.frequency<=1));
  assert.equal(race.bookmarkSafety.hold,true,'formal safety ledger must remain unchanged');
+});
+test('V11.25の列対応未検証データを参考試算へ自動投入しない',()=>{
+ const a=api();assert.equal(a.eligible({...race,bookmarkSafety:{...race.bookmarkSafety,version:'11.25-integrated-no-odds'}}),false);
+ assert.equal(a.eligible({...race,bookmarkSafety:{...race.bookmarkSafety,version:'11.25-master-hold-no-odds'}}),false);
 });
 test('line and rider comments are excluded from line-independent computation',()=>{
  const a=api(),s=a.simulate(race,'makuri',500);

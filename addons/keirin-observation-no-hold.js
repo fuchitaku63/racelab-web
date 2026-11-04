@@ -14,7 +14,9 @@ const $=id=>document.getElementById(id);
 const text=x=>String(x??'');
 const finite=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x):null;
 const value=(e,k)=>finite(e?.observed?.[k])??0;
-const eligible=r=>!!r&&r.bookmarkSafety?.hold===true&&Array.isArray(r.entries)
+// V11.25 explicitly marks positional numeric columns as unverified. Do not
+// silently route them into this model until their real DOM mapping is checked.
+const eligible=r=>!!r&&r.bookmarkSafety?.hold===true&&!/^11\.25/.test(r.bookmarkSafety?.version||'')&&Array.isArray(r.entries)
  &&r.entries.length>=3&&r.entries.length<=9
  &&r.entries.some(e=>finite(e.observed?.score)!==null);
 let races=null,revision=0,working=false,buttonLabel='';

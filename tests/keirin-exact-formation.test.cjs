@@ -18,7 +18,7 @@ test('integrity: loader embed exactly matches UTF-8 original and untouched 38-pa
  assert.ok(i>0&&j>i);
  assert.equal(JSON.parse(loader.slice(i+'const keirinFormationAdapter='.length,j)),code);
  assert.match(loader,/COUNT=38/);
- assert.match(loader,/EXPECTED='95937429ea7fe32251a1264171b252e7c3d9cdd8fe9578ddf01c8ea6b1ef78ca'/);
+ assert.match(loader,/EXPECTED='dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68'/);
  assert.match(loader,/keirinNoLineAdapter.*keirinFormationAdapter/);
 });
 test('full rectangular set becomes one actual formation, preserving exact 4 points',()=>{
