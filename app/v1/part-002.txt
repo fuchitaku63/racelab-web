@@ -59,12 +59,12 @@ globalThis.RaceBookmark1123=(()=>{
  const norm=s=>String(s??'').normalize('NFKC').replace(/\s+/gu,'');
  function provisional25(r,entries){
   const a=r.provisionalAnalysis,lv=r.lineVerification,ids=entries.map(e=>e.number);
-  if(!a||a.status!=='PROVISIONAL_HYPOTHESIS'||!lv||lv.specialContested!==false||!Array.isArray(lv.issues)||lv.issues.length||!Array.isArray(a.formations)||a.formations.length>72)return null;
+  if(!a||a.status!=='PROVISIONAL_HYPOTHESIS'||!['LINE_HYPOTHESIS_2026_09_15B_SUBSET_V1','LINE_HYPOTHESIS_2026_09_15B_SUBSET_V2'].includes(a.version)||!lv||lv.specialContested!==false||!Array.isArray(lv.issues)||lv.issues.length||!Array.isArray(a.formations)||a.formations.length>72)return null;
   if(!Array.isArray(r.lineGroups)||!r.lineGroups.length||r.lineGroups.some(g=>!Array.isArray(g)||!g.length||g.some(n=>!/^[1-9]$/.test(String(n)))))return null;
   const groups=r.lineGroups.map(g=>g.map(Number)),flat=groups.flat();if(flat.length!==ids.length||new Set(flat).size!==ids.length||flat.some(n=>!ids.includes(n)))return null;
   const stated=norm(r.line).replace(/[－―ー→]/g,'-').replace(/[／|｜]/g,'/');if(stated!==groups.map(g=>g.join('-')).join('/')||norm(r.lineSeq)!==flat.join('-'))return null;
   const expected=new Set();for(const g of groups)if(g.length>1){expected.add(g[0]+'-'+g[1]);expected.add(g[1]+'-'+g[0]);}
-  for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){expected.add(groups[i][0]+'-'+groups[j][0]);expected.add(groups[j][0]+'-'+groups[i][0]);}
+  for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){const choices=[[groups[i][0],groups[j][0]]];if(a.version.endsWith('_V2')){if(groups[j][1])choices.push([groups[i][0],groups[j][1]]);if(groups[i][1])choices.push([groups[i][1],groups[j][0]]);}for(const [x,y] of choices){expected.add(x+'-'+y);expected.add(y+'-'+x);}}
   const pairs=new Set(),out=[];
   for(const f of a.formations){if(!f||!Array.isArray(f.first)||f.first.length!==1||!Array.isArray(f.second)||f.second.length!==1||!Array.isArray(f.third))return null;const first=f.first[0],second=f.second[0],third=f.third;
    if(!Number.isInteger(first)||!Number.isInteger(second)||!ids.includes(first)||!ids.includes(second)||first===second||third.length!==ids.length-2||third.some(n=>!Number.isInteger(n)||!ids.includes(n)||n===first||n===second)||new Set(third).size!==third.length||f.count!==third.length)return null;

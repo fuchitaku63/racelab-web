@@ -56,7 +56,7 @@ test('conversion preserves text while refusing to confirm buyer-relevant line',(
 });
 test('original 38-part SHA guard and script installation are maintained',()=>{
  assert.match(loader,/COUNT=38/);
- assert.match(loader,/EXPECTED='dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68'/);
+ assert.match(loader,/EXPECTED='cbc1d4e73734ea2e0bc58780478e06e1d8bc389bf38414693d05e3bc7554ce29'/);
  assert.match(loader,/html\.lastIndexOf\('<\/body>'\)/);
  assert.equal(typeof handlers.DOMContentLoaded,'function');
 });

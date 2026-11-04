@@ -26,7 +26,7 @@ test('source and live-loader embed remain byte-for-byte equal',()=>{
  assert.ok(i>=0&&j>i);
  assert.equal(JSON.parse(loader.slice(i+'const keirinNoLineAdapter='.length,j)),source);
  assert.match(loader,/COUNT=38/);
- assert.match(loader,/EXPECTED='dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68'/);
+ assert.match(loader,/EXPECTED='cbc1d4e73734ea2e0bc58780478e06e1d8bc389bf38414693d05e3bc7554ce29'/);
  assert.match(loader,/reportAdapter.*keirinNoLineAdapter/);
 });
 test('unknown lineup is accepted for independent observational computation',()=>{

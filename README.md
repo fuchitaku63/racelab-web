@@ -4,7 +4,7 @@
 
 iPhone: GitHub Pages のURLをSafariで開き、「共有」→「ホーム画面に追加」。初回はオンラインで約5MBの取得が必要です。オフライン動作にはService Workerのインストール成功が必要です。
 
-実際のレースPDF、入力履歴、認証情報、非公開ソースは収録していません。復元するアプリのSHA-256: dd5439ca2ff79a5bc977bf2446c3a09982b6dc2829b8a377f2e70a2a1a476c68。配信上38分割していますが起動時にSHA-256を照合して復元します。
+実際のレースPDF、入力履歴、認証情報、非公開ソースは収録していません。復元するアプリのSHA-256: cbc1d4e73734ea2e0bc58780478e06e1d8bc389bf38414693d05e3bc7554ce29。配信上38分割していますが起動時にSHA-256を照合して復元します。
 
 GitHub Pages: Settings → Pages → Build and deployment → Deploy from a branch → main / (root)。
 
