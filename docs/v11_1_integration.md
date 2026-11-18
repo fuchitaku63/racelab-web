@@ -6,7 +6,7 @@
 ## 分離して保管した検証版
 2026-11-18に作成した `racelab_shared_v11_1.html` は、構造化統計だけから全端末に同じ参考モデル入力を組む。旧V11を上書きしない。
 
-- HTML SHA-256: `d0b586edf0bd2d0d30778bd96eced240f344871a938a4e81b275c02037a2b58d`
+- HTML SHA-256: `d0f7966d4ee1103b87f2b277489c9d66abc3d7e2a115139de0193e97e95c9056`
 - Scriptable起動ファイル: `RaceLab_Shared_V11_1.js` （同一HTMLを開くだけ）
 - ZIP: `racelab_shared_v11_1.zip`
 - R3正式Scenario/Pair・精度校正は**未実装**
